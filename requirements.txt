@@ -1,0 +1,5 @@
+streamlit
+pandas
+streamlit-option_menu
+xlsxwriter
+st-gsheets-connection
