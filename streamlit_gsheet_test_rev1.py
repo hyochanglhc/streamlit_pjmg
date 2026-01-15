@@ -239,7 +239,9 @@ elif menu == "중도금결산":
 
 elif menu == "분양":
     st.subheader('📊 분양현황 조회')
-    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=875634826#gid=875634826"
+    #url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=875634826#gid=875634826" #분양s
+    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=391839077#gid=391839077"
+    
     data = load_and_clean_data(url, numeric_col='총분양금')
 
     pj = st.text_input('사업명 입력')
@@ -250,10 +252,10 @@ elif menu == "분양":
         #cond = (data['기준월'] == dday)
         if pj:
             cond = data['사업명'].str.contains(pj, na=False, case=False)        
-            data['입주증번호']=pd.to_numeric(data['입주증번호'],errors='coerce').fillna(0)
-            ibju = data['입주증번호'].sum()
-            lawsuit = (data['소송']=='소송').sum() #소송 개수
+            data['입주증번호']=pd.to_numeric(data['입주증번호'],errors='coerce').fillna(0)            
             dff = data[cond]    
+            ibju = dff['입주증번호'].sum()
+            lawsuit = (dff['소송']=='소송').sum() #소송 개수
             if not dff.empty:                
                 # 1. 피벗 테이블 생성 (계약여부별 동호수 개수)
                 dfp = dff.pivot_table(
@@ -314,35 +316,47 @@ elif menu == "분양":
                 
                 st.divider()               
                 
-                st.subheader('📊 입주현황 조회')                                        
+                
                 if ibju > 0:
+                    st.subheader('📊 입주현황')                                        
                     dfp3 = dff.pivot_table(
                         index='상품',
                         columns='완납여부', 
                         values='동호수', 
                         aggfunc='count',
                         fill_value=0)        
-                    # 2. 백만 단위 변환 및 소수점 처리
-                    # 모든 수치형 데이터를 1,000,000으로 나눕니다.
+                    # [추가] 필수 컬럼('완납', '미납')이 없을 경우를 대비해 0으로 생성
+# =============================================================================
+#                     for col in ['완납', '미납']:
+#                         if col not in dfp3.columns:
+#                             dfp3[col] = 0
+# =============================================================================
+                
+                    # 2. 합계 및 정렬 (초기 공급량 기준 정렬)
                     dfp3['공급'] = dfp3.sum(axis=1)
-                    #dfp2 = (dfp2/ 1_000_000).round(0) 
-                    
                     dfp3 = dfp3.sort_values(by='공급', ascending=False)
-
-                    original_cols3 = [c for c in dfp3.columns if c != '공급'] # 합계 제외한 원래 칼럼들
-                    for col in original_cols3:
+                
+                    # 3. 비율(%) 계산
+                    # '공급'을 제외한 원래의 컬럼들(완납, 미납)에 대해 루프
+                    # 만약 컬럼이 더 많아질 수 있다면 이 방식이 안전합니다.
+                    target_cols = [c for c in ['완납', '미납'] if c in dfp3.columns]
+                    for col in target_cols:
                         dfp3[f'{col}(%)'] = (dfp3[col] / dfp3['공급'] * 100).round(0).fillna(0)
-                    # 3. 데이터프레임 정리 (인덱스 초기화)                
-                    #dfp3['공급(%)'] = (dfp3['공급'] / dfp3['공급'].sum() * 100).round(0).fillna(0)
+                
+                    # 4. 데이터프레임 정리 및 인덱스 초기화
                     dfp3 = dfp3.reset_index()
                     
-                    custom_order = ['아파트', '오피스텔', '생활숙박시설','지식산업센터','판매시설', '상가']                    
-                    # 해당 컬럼을 Categorical 타입으로 변환 (ordered=True가 핵심)
+                    # 5. 사용자 지정 순서 정렬
+                    custom_order = ['아파트', '오피스텔', '생활숙박시설','지식산업센터','판매시설', '상가']
+                    # 데이터에 존재하는 '상품'만 카테고리로 설정 (데이터 유실 방지)
                     dfp3['상품'] = pd.Categorical(dfp3['상품'], categories=custom_order, ordered=True)
-                    # 정렬 실행
-                    dfp3 = dfp3.sort_values(by='상품')                    
                     
+                    # 6. 최종 컬럼 선택 및 정렬
+                    # 컬럼 존재 여부를 다시 확인하며 슬라이싱
+                    final_cols = ['상품', '공급', '완납', '미납', '완납(%)', '미납(%)']
+                    dfp3 = dfp3[final_cols].sort_values(by='상품')                
                     
+                                        
                     dfp4 = dff.pivot_table(
                         index='상품', 
                         columns='완납여부', 
@@ -378,10 +392,10 @@ elif menu == "분양":
                         st.markdown('<div style="text-align: right;">(단위 : 백만원, %)</div>', unsafe_allow_html=True)                    
                         st.dataframe(dfp4, use_container_width=True, hide_index=True)
                         
-                st.divider()
+                st.divider()                
                 
-                st.subheader('📊 소송현황 조회')                                        
                 if lawsuit > 0:
+                    st.subheader('📊 소송현황')                                        
                     dfp5 = dff.pivot_table(
                         index='상품',
                         columns='소송', 
