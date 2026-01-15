@@ -67,14 +67,16 @@ with st.sidebar:
         icons=["info-circle", "house", "bank", "bank", "bank","bank"],
         menu_icon="cast", default_index=0,
         )    
-    menu1 = option_menu(
-        menu_title="Menu1", #required
-        options=["opt1","opt2","opt3"], #required
-        icons=["house", "book", "envelope", "envelope", "envelope", "envelope"], #optional
-        menu_icon="cast", #optional
-        #default_index=0, #optional
-        )
-    st.info("기타 옵션은 준비 중입니다.") # menu1, menu3 등 미사용 메뉴 정리
+# =============================================================================
+#     menu1 = option_menu(
+#         menu_title="Menu1", #required
+#         options=["opt1","opt2","opt3"], #required
+#         icons=["house", "book", "envelope", "envelope", "envelope", "envelope"], #optional
+#         menu_icon="cast", #optional
+#         #default_index=0, #optional
+#         )
+#     st.info("기타 옵션은 준비 중입니다.") # menu1, menu3 등 미사용 메뉴 정리
+# =============================================================================
 
 
 # --- 3. 메뉴별 로직 ---
