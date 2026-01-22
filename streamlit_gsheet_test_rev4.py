@@ -51,7 +51,7 @@ def display_search_result(df, cond, target_col=None):
 
 @st.cache_data
 def load_location_data():    
-    file_path = "K:/pyenv/py311/py_stream/file_content.txt"
+    file_path = "file_content.txt"
     if not os.path.exists(file_path): return {}
     
     try:
@@ -690,4 +690,5 @@ elif menu == "실거래조회":
 
 # --- 하단 안내 ---
 if menu == "옵션선택":
+
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
