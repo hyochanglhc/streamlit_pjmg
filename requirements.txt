@@ -3,3 +3,8 @@ pandas
 streamlit-option_menu
 xlsxwriter
 st-gsheets-connection
+pymysql
+sqlalchemy
+cryptography
+python-dotenv
+
