@@ -7,4 +7,5 @@ pymysql
 sqlalchemy
 cryptography
 python-dotenv
+plotly
 
