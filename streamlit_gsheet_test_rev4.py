@@ -63,7 +63,7 @@ def style_fill_row(row):
     #이 경우 name[1]을 선택해 실제 항목명인 '항목명'만 가져옵니다.
     item_name = name[1] if isinstance(name, tuple) else name        
     if item_name in ['영업이익','원가율','경상이익']:
-        return ['background-color: black'] * len(row)    
+        return ['background-color: lightgreen'] * len(row)    
     return [''] * len(row)
     #조건에 맞지 않으면: 빈 문자열('')을 반환하여 기본 스타일을 유지합니다.
     # * len(row)를 하는 이유는 행의 모든 칸(Cell) 개수만큼 스타일 정보를 리스트로 전달해야 하기 때문입니다.
@@ -1494,3 +1494,4 @@ elif menu == "청약홈조회":
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
+
