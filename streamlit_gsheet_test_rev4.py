@@ -19,6 +19,47 @@ os.chdir(current_dir)  # 현재 디렉토리로 이동
 
 # --- 설정 및 스타일 ---
 st.set_page_config(page_title="구글시트조회", layout="wide")
+def check_login():
+    """사용자 인증 상태를 확인하고 로그인 화면을 출력합니다."""
+    # 세션 상태 초기화
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+
+    # 로그인 되어있지 않은 경우 양식 출력
+    if not st.session_state.logged_in:
+        st.markdown("""
+            <style>
+            .login-box {
+                max-width: 400px;
+                padding: 2rem;
+                margin: auto;
+                border: 1px solid #ddd;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        _, col, _ = st.columns([1, 1.5, 1])
+        with col:
+            st.write("## 🔒 시스템 로그인")
+            admin_id = st.text_input("아이디(ID)", placeholder="admin_id 입력")
+            admin_pw = st.text_input("비밀번호(Password)", type="password", placeholder="admin_password 입력")
+            
+            if st.button("로그인", use_container_width=True):
+                # ID/PW 검증 (실제 운영 시 st.secrets나 환경변수 사용 권장)
+                if admin_id == "admin" and admin_pw == "1234":
+                    st.session_state.logged_in = True
+                    st.success("인증되었습니다. 대시보드로 이동합니다.")
+                    st.rerun()
+                else:
+                    st.error("아이디 또는 비밀번호가 틀렸습니다.")
+        return False
+    return True
+
+# 로그인 체크 실행 (성공하지 못하면 아래 코드 실행 안 함)
+if not check_login():
+    st.stop()
 st.markdown("""
     <style>    
     .stDataFrame div[data-testid="stTableHD"] {font-size: 16px !important;}    
@@ -1494,4 +1535,5 @@ elif menu == "청약홈조회":
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
+
 
