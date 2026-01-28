@@ -13,19 +13,114 @@ from pandas.tseries.offsets import MonthEnd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import plotly.express as px
+import pymysql
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(current_dir)  # 현재 디렉토리로 이동
 
 # --- 설정 및 스타일 ---
-st.set_page_config(page_title="구글시트조회", layout="wide")
+st.set_page_config(page_title="MANAGE", layout="wide")
+# ==================== 로그인 로직 추가 ====================
+load_dotenv()
+
+def get_engine():
+    # 로컬 .env 또는 서버 환경 변수에서 가져옴
+    db_user = os.getenv("DB_USER")
+    db_pw = os.getenv("DB_PASSWORD")
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT")
+    db_name = os.getenv("DB_NAME")
+    
+    # SQLAlchemy 엔진 생성
+    db_url = f"mysql+pymysql://{db_user}:{db_pw}@{db_host}:{db_port}/{db_name}"
+    return create_engine(db_url)
+
+
+def get_connection():
+    return pymysql.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        # 포트 번호는 정수(int)형이어야 하므로 형변환이 필요합니다.
+        port=int(os.getenv("DB_PORT", 3309)), 
+        charset='utf8',
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor
+    )
+# 2. 로그인 처리 로직
+def login_handler(id_input, pass_input):
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        # ID와 PW를 동시에 체크
+        sql = "SELECT user FROM rp_user WHERE user = %s AND password = %s;"
+        cur.execute(sql, (id_input, pass_input))
+        row = cur.fetchone()
+        return True if row else False
+    except pymysql.Error as e:
+        st.error(f"DB 오류: {e}")
+        return False
+    finally:
+        if conn: conn.close()
+
+def signup_handler(new_id, new_pass):
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        # 아이디 중복 체크
+        cur.execute("SELECT * FROM rp_user WHERE user = %s;", (new_id,))
+        if cur.fetchone():
+            return False, "이미 존재하는 아이디입니다."
+        
+        # 정보 저장
+        cur.execute("INSERT INTO rp_user (user, password) VALUES (%s, %s);", (new_id, new_pass))
+        return True, "회원가입이 완료되었습니다!"
+    except pymysql.Error as e:
+        return False, f"DB 오류: {e}"
+    finally:
+        if conn: conn.close()
+
+def delete_user_handler(user_id):
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM rp_user WHERE user = %s;", (user_id,))
+        return True
+    except pymysql.Error as e:
+        st.error(f"탈퇴 처리 중 오류 발생: {e}")
+        return False
+    finally:
+        if conn: conn.close()
+
+def get_total_user_count():
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        # rp_user 테이블의 전체 행 개수 조회
+        cur.execute("SELECT COUNT(*) as count FROM rp_user;")
+        row = cur.fetchone()
+        return row['count'] if row else 0
+    except pymysql.Error as e:
+        st.error(f"회원 수 조회 중 오류: {e}")
+        return 0
+    finally:
+        if conn: conn.close()
+
+
 def check_login():
-    """사용자 인증 상태를 확인하고 로그인 화면을 출력합니다."""
-    # 세션 상태 초기화
+    """DB 연동 사용자 인증 상태 확인 및 로그인 화면 출력"""
+    # 1. 세션 상태 초기화
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
 
-    # 로그인 되어있지 않은 경우 양식 출력
+    # 2. 로그인 되어있지 않은 경우 양식 출력
     if not st.session_state.logged_in:
         st.markdown("""
             <style>
@@ -42,24 +137,31 @@ def check_login():
 
         _, col, _ = st.columns([1, 1.5, 1])
         with col:
-            st.write("## 🔒 시스템 로그인")
-            admin_id = st.text_input("아이디(ID)", placeholder="admin_id 입력")
-            admin_pw = st.text_input("비밀번호(Password)", type="password", placeholder="admin_password 입력")
+            st.write("## 🔒 로그인")
+            input_id = st.text_input("아이디[사번]", placeholder="아이디 입력")
+            input_pw = st.text_input("비밀번호[사번]", type="password", placeholder="비밀번호 입력")
             
             if st.button("로그인", use_container_width=True):
-                # ID/PW 검증 (실제 운영 시 st.secrets나 환경변수 사용 권장)
-                if admin_id == "admin" and admin_pw == "1234":
+                # ---------------------------------------------------------
+                # [핵심 수정 부분] 하드코딩 대신 DB 핸들러 호출
+                # ---------------------------------------------------------
+                if login_handler(input_id, input_pw):
                     st.session_state.logged_in = True
-                    st.success("인증되었습니다. 대시보드로 이동합니다.")
+                    st.session_state.user_id = input_id  # 로그인한 ID 저장
+                    st.success(f"{input_id}님, 환영합니다! 대시보드로 이동합니다.")
                     st.rerun()
                 else:
                     st.error("아이디 또는 비밀번호가 틀렸습니다.")
-        return False
-    return True
+                # ---------------------------------------------------------
+        
+        return False # 로그인 실패 상태
+    
+    return True # 로그인 완료 상태
 
-# 로그인 체크 실행 (성공하지 못하면 아래 코드 실행 안 함)
+# 3. 로그인 체크 실행
 if not check_login():
     st.stop()
+# ==========================================================
 st.markdown("""
     <style>    
     .stDataFrame div[data-testid="stTableHD"] {font-size: 16px !important;}    
@@ -77,19 +179,9 @@ def get_gspread_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     # 기존에 사용하시던 JSON 키 경로를 그대로 입력하세요.
     SERVICE_ACCOUNT_FILE = r'K:/pyenv/py311/py_gsheet/python-gsheet-484713-be4d9602c973.json'
-    #SERVICE_ACCOUNT_FILE = 'python-gsheet-484713-be4d9602c973.json'
+    ##SERVICE_ACCOUNT_FILE = 'python-gsheet-484713-be4d9602c973.json'
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
     return gspread.authorize(creds)
-
-def get_engine():
-    load_dotenv()
-    db_user = os.getenv("DB_USER")
-    db_pw = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("DB_NAME")
-    db_url = f"mysql+pymysql://{db_user}:{db_pw}@{db_host}:{db_port}/{db_name}"
-    return create_engine(db_url)
 
 def style_fill_col(col):    
     style = ['' for _ in col]    
@@ -104,7 +196,7 @@ def style_fill_row(row):
     #이 경우 name[1]을 선택해 실제 항목명인 '항목명'만 가져옵니다.
     item_name = name[1] if isinstance(name, tuple) else name        
     if item_name in ['영업이익','원가율','경상이익']:
-        return ['background-color: lightgreen'] * len(row)    
+        return ['background-color: black'] * len(row)    
     return [''] * len(row)
     #조건에 맞지 않으면: 빈 문자열('')을 반환하여 기본 스타일을 유지합니다.
     # * len(row)를 하는 이유는 행의 모든 칸(Cell) 개수만큼 스타일 정보를 리스트로 전달해야 하기 때문입니다.
@@ -270,9 +362,32 @@ def alv_data():
     return dff
   
 
-# --- 사이드바 ---
+# --- 사이드바(로그인후) ---
+
 with st.sidebar:
-    menu = option_menu("Manage", ["옵션선택","사업개요","분양","실적조회","PF현황","동호약정", "자금수지","채권", "중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"],  #청약홈조회 제외
+    with st.sidebar:            
+        total_users = get_total_user_count()
+        st.markdown(f"""
+    <div style="margin-bottom: 10px;">
+        <p style="font-size: 16px">전체 회원수: {total_users}명</p>            
+    </div>""", unsafe_allow_html=True)
+        #st.metric(label="전체 회원 수", value=f"{total_users}명")
+        
+        st.info(f"👤 {st.session_state.user_id}님 접속 중")
+        if st.button("로그아웃"):
+            st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
+            st.rerun()
+        
+        st.divider()
+        with st.expander("회원탈퇴"):
+            st.warning("탈퇴 시 데이터가 삭제됩니다.")
+            confirm_delete = st.checkbox("정말 탈퇴하시겠습니까?")
+            if st.button("회원탈퇴 실행"):
+                if confirm_delete and delete_user_handler(st.session_state.user_id):
+                    st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
+                    st.rerun()
+                    
+        menu = option_menu("Manage", ["옵션선택","사업개요","분양","실적조회","PF현황","동호약정", "자금수지","채권", "중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"],  #청약홈조회 제외
                        #icons=["dash","info-circle", "bank", "bank", "bank", "bank","bank","house","house","house","house"],
                        icons=["dash"] + ["info-circle"]*15,
                        menu_icon="cast", default_index=0)
@@ -1530,10 +1645,6 @@ elif menu == "청약홈조회":
                 else:
                     st.error("상세 정보를 찾을 수 없습니다.")
 
-
-
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
-
-
