@@ -195,7 +195,7 @@ def style_fill_row(row):
     #isinstance(name, tuple): 만약 인덱스가 멀티 인덱스라면 ('대분류', '항목명')처럼 튜플(Tuple) 형태가 됩니다.
     #이 경우 name[1]을 선택해 실제 항목명인 '항목명'만 가져옵니다.
     item_name = name[1] if isinstance(name, tuple) else name        
-    if item_name in ['영업이익','원가율','경상이익']:
+    if item_name in ['영업이익','원가율','경상이익','소계','과부족']:
         return ['background-color: black'] * len(row)    
     return [''] * len(row)
     #조건에 맞지 않으면: 빈 문자열('')을 반환하여 기본 스타일을 유지합니다.
@@ -379,17 +379,19 @@ with st.sidebar:
             st.rerun()
         
         st.divider()
-        with st.expander("회원탈퇴"):
-            st.warning("탈퇴 시 데이터가 삭제됩니다.")
-            confirm_delete = st.checkbox("정말 탈퇴하시겠습니까?")
-            if st.button("회원탈퇴 실행"):
-                if confirm_delete and delete_user_handler(st.session_state.user_id):
-                    st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
-                    st.rerun()
-                    
-        menu = option_menu("Manage", ["옵션선택","사업개요","분양","실적조회","PF현황","동호약정", "자금수지","채권", "중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"],  #청약홈조회 제외
+# =============================================================================
+#         with st.expander("회원탈퇴"):
+#             st.warning("탈퇴 시 데이터가 삭제됩니다.")
+#             confirm_delete = st.checkbox("정말 탈퇴하시겠습니까?")
+#             if st.button("회원탈퇴 실행"):
+#                 if confirm_delete and delete_user_handler(st.session_state.user_id):
+#                     st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
+#                     st.rerun()
+# =============================================================================
+        items = ["옵션선택","사업개요","분양","동호약정", "자금수지","채권","PF현황","실적조회","소송","중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"] #청약홈조회
+        menu = option_menu("Manage", items,
                        #icons=["dash","info-circle", "bank", "bank", "bank", "bank","bank","house","house","house","house"],
-                       icons=["dash"] + ["info-circle"]*15,
+                       icons=["dash"] + ["info-circle"]*len(items),
                        menu_icon="cast", default_index=0)
 # --- 메뉴별 로직 ---
 if menu == "pjcode":
@@ -620,81 +622,113 @@ elif menu == "동호약정":
 elif menu == "자금수지":
     st.subheader('📊 자금수지 조회')
     url = "https://docs.google.com/spreadsheets/d/18AhC-xVCGMpapdZwpptxnkED3_sO18B7qDeKz-4oa60/edit?gid=0#gid=0"
-    data = conn.read(spreadsheet=url)
-    ncols = []
+    ddf = conn.read(spreadsheet=url)
+    
+    # 0. 숫자 데이터 전처리
+    ncols = ['금액']
     for col in ncols:
-        if col in data.columns:
-            data[col] = pd.to_numeric(data[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-    
+        if col in ddf.columns:
+            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+
+    # 1. 입력 UI (사업명 및 기준월 선택)
     col1, col2 = st.columns(2)
-    with col1: pj = st.text_input('사업명 입력')
-    with col2: dday = st.selectbox('기준월 선택', sorted(data['기준월'].unique(), reverse=True))       
-    if st.button('조회'):
-        cond = (data['기준월'] == dday)
-        if pj:
-            cond &= data['pjcode'].str.contains(pj, na=False, case=False)
+    pj_list = ddf['사업명'].drop_duplicates().tolist()
+    unique_months = sorted(ddf['기준월'].unique(), reverse=True)
     
-        dff = data[cond].copy()
-        if not dff.empty:
-            #st.dataframe(dff, use_container_width=True, hide_index=True)            
-            dff['집행월'] = pd.to_datetime(dff['집행월'])
-            dff['금액'] = pd.to_numeric(dff['금액'])
-            dfp = dff.pivot_table(index=['구분'], columns='집행월', values='금액', aggfunc='sum', fill_value=0)            
-            # 2. 과부족 계산 (수입 - 지출) : '수입'과 '지출' 행이 데이터에 있는지 확인 후 계산
-            #대괄호 두 개([[...]])를 쓴 이유: 결과값을 단일 값이 아닌 데이터프레임 형태로 유지
-            #인덱스가 '수입'인 모든 칼럼의 합을 구해서, 집행월이 index인 series를 반환            
-            income = dfp.loc[['수입']].sum() if '수입' in dfp.index else 0
-            expense = dfp.loc[['지출']].sum() if '지출' in dfp.index else 0
-            
-            shortage = income - expense
-            shortage.name = '과부족'            
-            # 3. 누계 과부족 계산 (열 방향으로 누적 합계)
-            cum_shortage = shortage.cumsum()
-            cum_shortage.name = '누계과부족'
-            
-            # 4. 기존 피벗 테이블에 과부족, 누계과부족 행 추가
-            # shortage와 cum_shortage (series)를 데이터프레임 형태로 변환하여 결합
-            dfp = pd.concat([dfp, shortage.to_frame().T, cum_shortage.to_frame().T])
-            def style_past_dates(col):
-                # 기준 날짜 (2025-12-31) : dday로 변경할 것.
-                threshold = pd.Timestamp('2025-12-31')
-                # 컬럼 이름(col.name)이 Timestamp 객체인지 확인 후 비교
-                color = 'color: gray;' if col.name <= threshold else 'color: black;'
-                return [color] * len(col)
-
-            # 6. 스타일 적용 (아직 컬럼이 날짜 객체일 때 적용해야 함)
-            styled_dfp = dfp.style.apply(style_past_dates)
-            
-            # 7. [출력 필터링] 2025-01-31 이후 컬럼만 선택
-            display_cols = [c for c in dfp.columns if c > pd.Timestamp('2025-01-31')]
-            dfp_to_show = dfp[display_cols].copy()
-
-            # 8. 스타일 함수 보강 (문자열 날짜가 들어와도 에러 안 나게 처리)
-            def style_past_dates(col):
-                threshold = pd.Timestamp('2025-12-31')
-                # 컬럼 이름이 문자열일 경우를 대비해 변환 후 비교
-                current_date = pd.to_datetime(col.name)
-                color = 'color: #9E9E9E;' if current_date <= threshold else 'color: white;'
-                return [color] * len(col)
-
-            # 9. 스타일 및 포맷 적용 (thousands로 수정)
-            # 만약 0을 숨기고 싶다면 .format(lambda v: "" if v == 0 else f"{v:,.0f}") 사용
-            styled_dfp = dfp_to_show.style.apply(style_past_dates).format(thousands=",")
-
-            # 10. 컬럼명을 깔끔하게 문자열로 변환 (출력용)
-            dfp_to_show.columns = [c.strftime('%Y-%m-%d') for c in dfp_to_show.columns]
-            
-            # 최종 출력
-            st.dataframe(styled_dfp, use_container_width=True)
-                     
-# =============================================================================
-#             target_date = pd.to_datetime('2024-12-31')
-#             dfp = dfp.loc[:, dfp.columns > target_date]            
-#             # 6. 보기 좋게 컬럼명을 문자열(YYYY-MM)로 변환
-#             dfp.columns = dfp.columns.strftime('%y/%m')            
-# =============================================================================
+    with col1: 
+        pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)
+    with col2:
+        dday = st.selectbox('기준월 선택', unique_months)
+        # 지난달(last_month) 자동 계산
+        if len(unique_months) >= 2:
+            idx = unique_months.index(dday)
+            # 선택한 월이 가장 마지막 데이터가 아니라면 다음 인덱스 값을 가져옴
+            last_month = unique_months[idx + 1] if idx + 1 < len(unique_months) else unique_months[-1]
         else:
-            st.warning("조회된 결과가 없습니다.")       
+            last_month = unique_months[0] if unique_months else None
+
+    # --- 2. 가공 및 스타일링 공통 함수 정의 ---
+    def make_styled_df(input_df, title_text):
+        if input_df.empty:
+            st.warning(f"[{title_text}] 조회된 결과가 없습니다.")
+            return
+
+        # (1) 데이터 타입 변환 및 피벗
+        temp_df = input_df.copy()
+        temp_df['집행월'] = pd.to_datetime(temp_df['집행월'])
+        dfp = temp_df.pivot_table(index=['구분','수지구분'], columns='집행월', values='금액', aggfunc='sum', fill_value=0)
+
+        # (2) 수입/지출 소계 계산
+        subtotals = []
+        unique_main_categories = dfp.index.get_level_values(0).unique()
+        for cat in unique_main_categories:
+            subtotal = dfp.xs(cat, level=0).sum().to_frame().T
+            subtotal.index = pd.MultiIndex.from_tuples([(cat, '소계')])
+            subtotals.append(subtotal)
+
+        # (3) 과부족 및 누계 과부족
+        income_total = dfp.xs('수입', level=0).sum() if '수입' in unique_main_categories else 0
+        expense_total = dfp.xs('지출', level=0).sum() if '지출' in unique_main_categories else 0
+        
+        shortage = (income_total - expense_total).to_frame().T
+        shortage.index = pd.MultiIndex.from_tuples([('합계', '과부족')])
+        
+        cum_shortage = (income_total - expense_total).cumsum().to_frame().T
+        cum_shortage.index = pd.MultiIndex.from_tuples([('합계', '누계과부족')])
+
+        # (4) 결합 및 정렬
+        dfp = pd.concat([dfp] + subtotals + [shortage, cum_shortage])
+        main_cats = ['수입', '지출', '합계']
+        final_order = []
+        for cat in main_cats:
+            if cat in dfp.index.get_level_values(0):
+                sub_cats = dfp.loc[cat].index.tolist()
+                normal_items = sorted([s for s in sub_cats if s not in ['소계', '과부족', '누계과부족']])
+                total_items = [s for s in sub_cats if s in ['소계', '과부족', '누계과부족']]
+                for sub in (normal_items + total_items):
+                    final_order.append((cat, sub))
+        dfp = dfp.reindex(final_order)
+
+        # (5) 출력 필터링 및 스타일링
+        display_cols = [c for c in dfp.columns if c > pd.Timestamp('2025-09-30')]
+        dfp_to_show = dfp[display_cols].copy()
+
+        def apply_styles(styler):
+            def style_rows(row):
+                is_total = row.name[1] in ['소계', '과부족', '누계과부족']
+                return ['background-color: lightyellow; color: black; font-weight: bold' if is_total else '' for _ in row]
+            
+            def style_cols(col):
+                threshold = pd.Timestamp('2025-12-31')
+                try:
+                    col_dt = pd.to_datetime(col.name)
+                    return ['color: #9E9E9E;' if col_dt <= threshold else '' for _ in col]
+                except: return [''] * len(col)
+                
+            return styler.apply(style_rows, axis=1).apply(style_cols, axis=0)
+
+        # 최종 렌더링
+        st.write(f"### {title_text}")
+        styled_df = apply_styles(dfp_to_show.style).format("{:,.0f}")
+        # 컬럼명 포맷 변경 (출력 직전)
+        dfp_to_show.columns = [c.strftime('%Y-%m-%d') for c in dfp_to_show.columns]
+        st.dataframe(styled_df, use_container_width=True)
+
+    # 3. 조회 실행
+    if st.button('조회'):
+        # 공통 사업명 필터
+        pj_cond = ddf['사업명'].str.contains(pj, na=False, case=False) if pj else True
+        
+        # (A) 이번 달 출력
+        cond_now = (ddf['기준월'] == dday) & pj_cond
+        make_styled_df(ddf[cond_now], f"📊 당월전망: {dday}")
+        
+        st.divider() # 구분선
+        
+        # (B) 지난 달 출력
+        if last_month:
+            cond_last = (ddf['기준월'] == last_month) & pj_cond
+            make_styled_df(ddf[cond_last], f"📊 전월전망 ({last_month})")
     
         
 elif menu == "채권":
@@ -1644,6 +1678,41 @@ elif menu == "청약홈조회":
                     st.table(df_detail.style.format({"타입최고가": "{:,}", "공급면적": "{:.2f}"}, na_rep="-"))
                 else:
                     st.error("상세 정보를 찾을 수 없습니다.")
+
+
+elif menu == "소송":
+    st.subheader('📊 소송현황 조회')
+    url = "https://docs.google.com/spreadsheets/d/1diNe5cD5pFtz9ca7c4z5leUsbUTPgAPMM7fFmjFOczQ/edit?gid=1053819147#gid=1053819147"
+    ddf = conn.read(spreadsheet=url)
+# =============================================================================
+#     ncols = ['약정','기표','상환','잔액']  #숫자칼럼 명시
+#     for col in ncols:
+#         if col in ddf.columns:
+#             ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+# =============================================================================
+    
+    col1, col2 = st.columns(2)
+    pj_list = ddf['사업명'].drop_duplicates().tolist()        
+    with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)                
+        
+    if st.button('조회'):        
+        if pj:
+            cond = (ddf['사업명'].str.contains(pj, na=False, case=False)) & (ddf['판결여부'])
+            dff = ddf[cond].copy()
+            if not dff.empty:
+                dfp = dff.pivot_table(index=['판결여부','소송규모','사건명','접수일','원고','기일차수','최종일자'], values='원고수', aggfunc='sum').reset_index()
+                dfp = dfp.sort_values(['소송규모','최종일자'], ascending=[False, False])                
+# =============================================================================
+#                 ncols = dff.select_dtypes(include=['number']).columns
+#                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
+# =============================================================================
+                st.dataframe(dfp, use_container_width=True, hide_index=True)
+                st.metric(label="소송건수", value=f"{len(dfp)}건")
+                
+                
+        else:
+            st.warning("조회된 결과가 없습니다.")            
+                
 
 # --- 하단 안내 ---
 if menu == "옵션선택":
