@@ -1701,7 +1701,7 @@ elif menu == "소송":
             dff = ddf[cond].copy()
             if not dff.empty:
                 dfp = dff.pivot_table(index=['판결여부','소송규모','사건명','접수일','원고','기일차수','최종일자'], values='원고수', aggfunc='sum').reset_index()
-                dfp = dfp.sort_values(['소송규모','최종일자'], ascending=[False, False])                
+                dfp = dfp.sort_values(['소송규모','접수일'], ascending=[False, True])                
 # =============================================================================
 #                 ncols = dff.select_dtypes(include=['number']).columns
 #                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
@@ -1717,3 +1717,4 @@ elif menu == "소송":
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
+
