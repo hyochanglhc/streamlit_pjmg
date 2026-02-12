@@ -572,8 +572,10 @@ elif menu == "동호약정납부":
         #df["동호수"] = df["동"].astype(str) + "-" + df["호수"].astype(str)
         # fillna(0)는 결측치가 있을 경우 에러를 방지하기 위함입니다.
         df["동호수"] = (
-            df["동"].fillna(0).astype(str) + 
-            "-" + df["호수"].fillna(0).astype(str).str.zfill(4))
+            df["동"].fillna(0).astype(int).astype(str) + 
+            "-" + 
+            df["호수"].fillna(0).astype(int).astype(str).str.zfill(4))
+        
         
         
         df["상품"] = df["세대속성"].str.split("/").str[0]    
@@ -649,14 +651,14 @@ elif menu == "동호약정납부":
             st.dataframe(dfp2_disp.style.format(precision=0, thousands=","), use_container_width=True, hide_index=True)                    
         
         with c2:
-            st.subheader('동호별 납부현황')                    
-            # [수정] 원본 데이터 보존을 위해 copy를 사용하고, 단위 변환은 한 번만 수행
-            #df_chart = dfg.copy()
-            dfg['납부원금'] = dfg['납부원금'] / 1000000             
-            # 1. 실제 데이터에 존재하는 차수 추출 및 정렬
-            cats = dfg['차수구분'].unique().tolist()            
+            st.subheader('동호별 납부현황')                                     
             
-            dfp3 = dfg.pivot_table(
+            # 1. 단위 변환 (중복 계산 방지 위해 별도 변수 권장하나 기존 흐름 유지)
+            df_c2 = dfg.copy()
+            df_c2['납부원금'] = df_c2['납부원금'] / 1000000 
+            
+            # 2. 피벗 테이블 생성
+            dfp3 = df_c2.pivot_table(
                 index=['동호수', '상품'], 
                 columns='차수구분', 
                 values='납부원금', 
@@ -665,14 +667,23 @@ elif menu == "동호약정납부":
                 margins=True, 
                 margins_name='합계'
             ).reset_index()            
+            
+            # 3. 컬럼 순서 재배치 (계약 컬럼 위치 조정)
             cols = dfp3.columns.tolist()
-            # 2. "계약" 칼럼이 리스트에 있는지 확인 후 위치 변경
             if "계약" in cols:
                 cols.insert(2, cols.pop(cols.index("계약")))            
-            # 3. 변경된 순서로 데이터프레임을 재정렬합니다.
             dfp3 = dfp3[cols]          
-            styled_dfp3 = dfp3.style.format(lambda x: f"{x:,.0f}" if (isinstance(x, (int, float)) and x != 0) else ("" if x == 0 else x))
-            st.dataframe(styled_dfp3, use_container_width=True)
+        
+            # 4. 스타일 적용 (0은 빈칸으로, 숫자는 콤마 적용)
+            # subset을 사용하여 '동호수', '상품' 컬럼은 포맷팅 대상에서 제외합니다.
+            numeric_cols = [c for c in dfp3.columns if c not in ['동호수', '상품']]
+            
+            styled_dfp3 = dfp3.style.format(
+                lambda x: f"{x:,.0f}" if x != 0 else "", 
+                subset=numeric_cols
+            )
+            
+            st.dataframe(styled_dfp3, use_container_width=True, hide_index=True)
             #st.dataframe(dfp3.style.format(precision=0, thousands=","), use_container_width=True, height=500)                       
                 
         
@@ -1858,4 +1869,5 @@ elif menu == "소송":
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
+
 
