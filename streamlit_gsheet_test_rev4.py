@@ -159,8 +159,12 @@ def check_login():
     return True # 로그인 완료 상태
 
 # 3. 로그인 체크 실행
-if not check_login():
-    st.stop()
+# =============================================================================
+# if not check_login():
+#     st.stop()
+# =============================================================================
+
+
 # ==========================================================
 st.markdown("""
     <style>    
@@ -366,19 +370,21 @@ def alv_data():
 
 with st.sidebar:
     with st.sidebar:            
-        total_users = get_total_user_count()
-        st.markdown(f"""
-    <div style="margin-bottom: 10px;">
-        <p style="font-size: 16px">전체 회원수: {total_users}명</p>            
-    </div>""", unsafe_allow_html=True)
-        #st.metric(label="전체 회원 수", value=f"{total_users}명")
+# =============================================================================
+#         total_users = get_total_user_count()
+#         st.markdown(f"""
+#     <div style="margin-bottom: 10px;">
+#         <p style="font-size: 16px">전체: {total_users}명</p>            
+#     </div>""", unsafe_allow_html=True)
+#         #st.metric(label="전체 회원 수", value=f"{total_users}명")
+#         
+#         st.info(f"👤 {st.session_state.user_id}님 접속 중")
+#         if st.button("로그아웃"):
+#             st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
+#             st.rerun()
+# =============================================================================
         
-        st.info(f"👤 {st.session_state.user_id}님 접속 중")
-        if st.button("로그아웃"):
-            st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
-            st.rerun()
-        
-        st.divider()
+        #st.divider()
 # =============================================================================
 #         with st.expander("회원탈퇴"):
 #             st.warning("탈퇴 시 데이터가 삭제됩니다.")
@@ -388,7 +394,7 @@ with st.sidebar:
 #                     st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
 #                     st.rerun()
 # =============================================================================
-        items = ["옵션선택","사업개요","분양","동호약정", "자금수지","채권","PF현황","실적조회","소송","중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"] #청약홈조회
+        items = ["옵션선택","사업개요","분양","동호약정납부", "자금수지","채권","PF현황","실적조회","소송","중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"] #청약홈조회
         menu = option_menu("Manage", items,
                        #icons=["dash","info-circle", "bank", "bank", "bank", "bank","bank","house","house","house","house"],
                        icons=["dash"] + ["info-circle"]*len(items),
@@ -543,7 +549,7 @@ elif menu == "PF현황":
             st.warning("조회된 결과가 없습니다.")            
 
 
-elif menu == "동호약정":
+elif menu == "동호약정납부":
     st.subheader('📊 동호약정 납입현황')
     
     sid = {
@@ -556,7 +562,8 @@ elif menu == "동호약정":
 
     if st.button('조회'):
         url = sid[sel_pj]      
-        df = conn.read(spreadsheet=url)    
+        ddf = conn.read(spreadsheet=url)    
+        df = ddf[ddf['동']!='합계']
 
         # [수정 포인트 1] 그룹화하기 전, 가장 먼저 숫자형으로 변환합니다.
         # 금액 컬럼들에 콤마(,)가 있을 수 있으므로 제거 후 변환합니다.
@@ -564,11 +571,17 @@ elif menu == "동호약정":
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-
-        df["약정일자"] = pd.to_datetime(df["약정일자"])    
-        df["동호수"] = df["동"].astype(str) + "-" + df["호수"].astype(str)
+        
+        #df["동호수"] = df["동"].astype(str) + "-" + df["호수"].astype(str)
+        # fillna(0)는 결측치가 있을 경우 에러를 방지하기 위함입니다.
+        df["동호수"] = (
+            df["동"].fillna(0).astype(str) + 
+            "-" + df["호수"].fillna(0).astype(str).str.zfill(4))
+        
+        
         df["상품"] = df["세대속성"].str.split("/").str[0]    
         df = df[df["주택형"] != "소계"].copy()    
+        df["약정일자"] = pd.to_datetime(df["약정일자"])    
         df["약정월"] = df["약정일자"] + pd.offsets.MonthEnd(0) 
 
         # [포인트 2] 이제 그룹화를 하면 숫자로 합산됩니다.
@@ -577,7 +590,7 @@ elif menu == "동호약정":
             "납부원금": "sum"})
         dfg = dfg[dfg["약정월"].notnull()]
         dfg = dfg.sort_values("약정월")    
-        dfg["차수구분"] = dfg["차수"].str[:2]
+        dfg["차수구분"] = dfg["차수"].str[:2]  #계약, 1차, 2차, 잔금
         # [포인트 3] 재그룹화
         dfg2 = dfg.groupby(["상품", "약정월", "차수", "차수구분"], as_index=False).agg({
             "납부원금": "sum",
@@ -612,17 +625,65 @@ elif menu == "동호약정":
         # 비교를 위해 Timestamp 형식으로 변환
         threshold_date = pd.Timestamp(last_day_of_last_month)        
         
+        def highlight_row(row):
+            # '구분' 컬럼이 '납부원금'이면 lightyellow, 아니면 빈 문자열(기본값)
+            color = 'color: lightyellow' if row['구분'] == '납부원금' else ''
+            return [color] * len(row)
+
+        # 3. 스타일 적용 및 출력
+        # 기존 style_by_date(열 기준 스타일)와 highlight_row(행 기준 스타일)를 체이닝하여 적용
+        styled_dfp = (dfp.style
+                      .apply(style_by_date, axis=0)        # 날짜 기준 열 스타일 (기존)
+                      .apply(highlight_row, axis=1)        # '납부원금' 기준 행 스타일 (추가)
+                      .format(thousands=",", precision=0))
         
-        # 3. 스타일 적용 및 출력        
-        styled_dfp = dfp.style.apply(style_by_date, axis=0).format(thousands=",", precision=0)
+        st.dataframe(styled_dfp, use_container_width=True, hide_index=True)        
         
-        st.dataframe(styled_dfp, use_container_width=True, hide_index=True)                
+                
+        c1, c2 = st.columns([3,7])
+        with c1:
+            st.subheader('상품별 중도금납부현황')
+            df_mid = dfg[dfg['차수'].str.contains('차', na=False)].copy()
+            df_mid = df_mid[['동호수','상품','차수','차수구분','납부원금']]        
+            #df_mid.rename(columns={'납부원금': '납부중도금'}, inplace=True)
+            dfp2 = df_mid.pivot_table(index=['상품'], values='납부원금', aggfunc='sum',fill_value=0, margins=True, margins_name='합계').reset_index()
+            dfp2_disp = dfp2.copy()
+            dfp2_disp['납부원금'] = dfp2_disp['납부원금'] / 1000000            
+            st.dataframe(dfp2_disp.style.format(precision=0, thousands=","), use_container_width=True, hide_index=True)                    
         
+        with c2:
+            st.subheader('동호별 납부현황')                    
+            # [수정] 원본 데이터 보존을 위해 copy를 사용하고, 단위 변환은 한 번만 수행
+            #df_chart = dfg.copy()
+            dfg['납부원금'] = dfg['납부원금'] / 1000000             
+            # 1. 실제 데이터에 존재하는 차수 추출 및 정렬
+            cats = dfg['차수구분'].unique().tolist()            
+            
+            dfp3 = dfg.pivot_table(
+                index=['동호수', '상품'], 
+                columns='차수구분', 
+                values='납부원금', 
+                aggfunc='sum',
+                fill_value=0, 
+                margins=True, 
+                margins_name='합계'
+            ).reset_index()            
+            cols = dfp3.columns.tolist()
+            # 2. "계약" 칼럼이 리스트에 있는지 확인 후 위치 변경
+            if "계약" in cols:
+                cols.insert(2, cols.pop(cols.index("계약")))            
+            # 3. 변경된 순서로 데이터프레임을 재정렬합니다.
+            dfp3 = dfp3[cols]          
+            styled_dfp3 = dfp3.style.format(lambda x: f"{x:,.0f}" if (isinstance(x, (int, float)) and x != 0) else ("" if x == 0 else x))
+            st.dataframe(styled_dfp3, use_container_width=True)
+            #st.dataframe(dfp3.style.format(precision=0, thousands=","), use_container_width=True, height=500)                       
+                
         
 elif menu == "자금수지":
     st.subheader('📊 자금수지 조회')
     url = "https://docs.google.com/spreadsheets/d/18AhC-xVCGMpapdZwpptxnkED3_sO18B7qDeKz-4oa60/edit?gid=0#gid=0"
-    ddf = conn.read(spreadsheet=url)
+    ddf = conn.read(spreadsheet=url)    
+    ddf = ddf[ddf['수지구분']=='영업수지']  #영업수지만..
     
     # 0. 숫자 데이터 전처리
     ncols = ['금액']
@@ -631,7 +692,7 @@ elif menu == "자금수지":
             ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     # 1. 입력 UI (사업명 및 기준월 선택)
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     pj_list = ddf['사업명'].drop_duplicates().tolist()
     unique_months = sorted(ddf['기준월'].unique(), reverse=True)
     
@@ -639,80 +700,104 @@ elif menu == "자금수지":
         pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)
     with col2:
         dday = st.selectbox('기준월 선택', unique_months)
-        # 지난달(last_month) 자동 계산
-        if len(unique_months) >= 2:
-            idx = unique_months.index(dday)
-            # 선택한 월이 가장 마지막 데이터가 아니라면 다음 인덱스 값을 가져옴
-            last_month = unique_months[idx + 1] if idx + 1 < len(unique_months) else unique_months[-1]
-        else:
-            last_month = unique_months[0] if unique_months else None
-
-    # --- 2. 가공 및 스타일링 공통 함수 정의 ---
-    def make_styled_df(input_df, title_text):
+    with col3:
+        # 화면에 표시를 시작할 시점 (출력월) 설정
+        # 기본값을 '2025-09' 등으로 설정하거나 리스트에서 선택하게 할 수 있습니다.
+        print_month = st.date_input('출력 시작월 선택', value=pd.to_datetime('2025-11-30'))
+    
+    # 지난달(last_month) 자동 계산 로직
+    if len(unique_months) >= 2:
+        idx = unique_months.index(dday)
+        last_month = unique_months[idx + 1] if idx + 1 < len(unique_months) else unique_months[-1]
+    else:
+        last_month = unique_months[0] if unique_months else None
+    
+    ## --- 2. 가공 및 스타일링 함수 (print_month 변수 사용) ---
+    def make_styled_df(input_df, title_text, start_date):
         if input_df.empty:
             st.warning(f"[{title_text}] 조회된 결과가 없습니다.")
             return
-
+    
         # (1) 데이터 타입 변환 및 피벗
         temp_df = input_df.copy()
         temp_df['집행월'] = pd.to_datetime(temp_df['집행월'])
-        dfp = temp_df.pivot_table(index=['구분','수지구분'], columns='집행월', values='금액', aggfunc='sum', fill_value=0)
-
-        # (2) 수입/지출 소계 계산
-        subtotals = []
-        unique_main_categories = dfp.index.get_level_values(0).unique()
-        for cat in unique_main_categories:
-            subtotal = dfp.xs(cat, level=0).sum().to_frame().T
-            subtotal.index = pd.MultiIndex.from_tuples([(cat, '소계')])
-            subtotals.append(subtotal)
-
-        # (3) 과부족 및 누계 과부족
-        income_total = dfp.xs('수입', level=0).sum() if '수입' in unique_main_categories else 0
-        expense_total = dfp.xs('지출', level=0).sum() if '지출' in unique_main_categories else 0
+        dfp = temp_df.pivot_table(index='구분', columns='집행월', values='금액', aggfunc='sum', fill_value=0)
         
+        # 가로 총합계 계산
+        dfp['총합계'] = dfp.sum(axis=1)
+    
+        # (2) 누계 및 과부족 계산
+        original_indices = dfp.index.tolist()
+        calc_rows = []
+        
+        income_rows = [i for i in original_indices if '수입' in i]
+        expense_rows = [i for i in original_indices if '지출' in i]
+        
+        income_total = dfp.loc[income_rows].sum() if income_rows else pd.Series(0, index=dfp.columns)
+        expense_total = dfp.loc[expense_rows].sum() if expense_rows else pd.Series(0, index=dfp.columns)
+    
+        # [수정] 수입소계 제외, 수입누계만 추가
+        if not income_total.sum() == 0:
+            s2 = income_total.cumsum().to_frame().T
+            s2.index = ['수입누계']
+            calc_rows.append(s2)
+    
+        # [수정] 지출소계 제외, 지출누계만 추가
+        if not expense_total.sum() == 0:
+            e2 = expense_total.cumsum().to_frame().T
+            e2.index = ['지출누계']
+            calc_rows.append(e2)
+    
+        # 과부족 및 누계 과부족
         shortage = (income_total - expense_total).to_frame().T
-        shortage.index = pd.MultiIndex.from_tuples([('합계', '과부족')])
-        
+        shortage.index = ['과부족']
         cum_shortage = (income_total - expense_total).cumsum().to_frame().T
-        cum_shortage.index = pd.MultiIndex.from_tuples([('합계', '누계과부족')])
-
-        # (4) 결합 및 정렬
-        dfp = pd.concat([dfp] + subtotals + [shortage, cum_shortage])
-        main_cats = ['수입', '지출', '합계']
-        final_order = []
-        for cat in main_cats:
-            if cat in dfp.index.get_level_values(0):
-                sub_cats = dfp.loc[cat].index.tolist()
-                normal_items = sorted([s for s in sub_cats if s not in ['소계', '과부족', '누계과부족']])
-                total_items = [s for s in sub_cats if s in ['소계', '과부족', '누계과부족']]
-                for sub in (normal_items + total_items):
-                    final_order.append((cat, sub))
+        cum_shortage.index = ['누계과부족']
+        calc_rows.extend([shortage, cum_shortage])
+    
+        # (3) 결합 및 정렬
+        dfp = pd.concat([dfp] + calc_rows)
+        
+        # [수정] 정렬 순서 정의에서 소계 명칭 제거
+        all_indices = dfp.index.tolist()
+        final_order = (
+            [i for i in all_indices if '수입' in i and i != '수입누계'] + ['수입누계'] +
+            [i for i in all_indices if '지출' in i and i != '지출누계'] + ['지출누계'] +
+            ['과부족', '누계과부족']
+        )
+        seen = set()
+        final_order = [x for x in final_order if x in dfp.index and not (x in seen or seen.add(x))]
         dfp = dfp.reindex(final_order)
-
-        # (5) 출력 필터링 및 스타일링
-        display_cols = [c for c in dfp.columns if c > pd.Timestamp('2025-09-30')]
-        dfp_to_show = dfp[display_cols].copy()
-
+    
+        # (4) 출력 필터링 및 컬럼명 변환
+        sel_cols = [c for c in dfp.columns if (isinstance(c, pd.Timestamp) and c > pd.to_datetime(start_date))]
+        dis_cols = sel_cols + ['총합계']
+        dfp_to_show = dfp[dis_cols].copy()
+        
+        new_columns = []
+        for c in dfp_to_show.columns:
+            if isinstance(c, pd.Timestamp):
+                new_columns.append(c.strftime('%Y-%m'))
+            else:
+                new_columns.append(str(c))
+        dfp_to_show.columns = new_columns
+    
+        # (5) 스타일링 함수
         def apply_styles(styler):
-            def style_rows(row):
-                is_total = row.name[1] in ['소계', '과부족', '누계과부족']
-                return ['background-color: lightyellow; color: black; font-weight: bold' if is_total else '' for _ in row]
-            
-            def style_cols(col):
-                threshold = pd.Timestamp('2025-12-31')
-                try:
-                    col_dt = pd.to_datetime(col.name)
-                    return ['color: #9E9E9E;' if col_dt <= threshold else '' for _ in col]
-                except: return [''] * len(col)
+            def style_rows(row):                
                 
-            return styler.apply(style_rows, axis=1).apply(style_cols, axis=0)
-
-        # 최종 렌더링
+                target_names = ['수입', '지출', '과부족']  #음영적용
+                is_highlight = row.name in target_names
+                return ['background-color: lightyellow; color: black; font-weight: bold' if is_highlight else '' for _ in row]
+            return styler.apply(style_rows, axis=1)
+    
+        # (6) 최종 렌더링
         st.write(f"### {title_text}")
-        styled_df = apply_styles(dfp_to_show.style).format("{:,.0f}")
-        # 컬럼명 포맷 변경 (출력 직전)
-        dfp_to_show.columns = [c.strftime('%Y-%m-%d') for c in dfp_to_show.columns]
-        st.dataframe(styled_df, use_container_width=True)
+        if not dfp_to_show.empty:    
+            styled_df = apply_styles(dfp_to_show.style).format(lambda x: f"{x:,.0f}" if x != 0 else "")    
+            st.dataframe(styled_df, use_container_width=True)
+        else:
+            st.info("선택한 출력월 이후의 데이터가 없습니다.")
 
     # 3. 조회 실행
     if st.button('조회'):
@@ -721,19 +806,67 @@ elif menu == "자금수지":
         
         # (A) 이번 달 출력
         cond_now = (ddf['기준월'] == dday) & pj_cond
-        make_styled_df(ddf[cond_now], f"📊 당월전망: {dday}")
-        
-        st.divider() # 구분선
+        # 마지막 인자로 print_month를 반드시 넣어주어야 합니다.
+        make_styled_df(ddf[cond_now], f"📊 당월전망: {dday}", print_month) 
         
         # (B) 지난 달 출력
         if last_month:
             cond_last = (ddf['기준월'] == last_month) & pj_cond
-            make_styled_df(ddf[cond_last], f"📊 전월전망 ({last_month})")
+            # 여기도 마찬가지로 print_month를 추가합니다.
+            make_styled_df(ddf[cond_last], f"📊 전월전망 ({last_month})", print_month)
+            
+            
+        #차트  
+        cond_now = (ddf['기준월'] == dday) & pj_cond
+        df_now = ddf[cond_now].copy()
+
+        if not df_now.empty:
+            # 데이터 가공: 수입 - 지출 계산
+            df_now['집행월'] = pd.to_datetime(df_now['집행월'])
+            df_chart = df_now.pivot_table(index='집행월', columns='구분', values='금액', aggfunc='sum', fill_value=0)            
+            # 수입/지출 컬럼 존재 여부 확인 후 과부족 계산
+            inc = df_chart['수입'] if '수입' in df_chart.columns else 0
+            exp = df_chart['지출'] if '지출' in df_chart.columns else 0
+            
+            # 월별 누계과부족 계산
+            df_chart['누계과부족'] = (inc - exp).cumsum()
+            # 출력범위 결정            
+            df_chart = df_chart.reset_index()
+            df_chart = df_chart[df_chart['집행월'].dt.year <= datetime.datetime.now().year]            
+
+            st.write(f"#### 📈 {dday} 기준 누계과부족 추이")
+
+            # 1. Y축 대칭 범위를 위한 최대 절대값 계산            
+            max_val = df_chart['누계과부족'].abs().max() * 1.1 
+            
+            fig = px.line(
+                df_chart, 
+                x='집행월', 
+                y='누계과부족',
+                markers=True,
+                #text=df_chart['누계과부족'].apply(lambda x: f"{x:,.0f}") # 텍스트 라벨에도 콤마 추가
+            )            
+            # 차트 레이아웃 설정
+            #fig.update_traces(textposition="top center", line_color="#007BFF")            
+            fig.update_layout(
+                xaxis_title="집행월",
+                yaxis_title="금액 (백만원)",
+                hovermode="x unified",
+                xaxis=dict(tickformat="%Y-%m"),
+                
+                # Y축 설정 변경
+                yaxis=dict(
+                    tickformat=",d",        # 'k' 대신 천 단위 콤마 표시 (정수형)
+                    range=[-max_val, max_val] # 0을 기준으로 -최대값 ~ +최대값 대칭 설정
+                )
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
     
         
 elif menu == "채권":
     st.subheader('📊 채권현황 조회')
-    url = "https://docs.google.com/spreadsheets/d/1RlNYrWWezvHQfceEgmHIkC-c7dnIxRIWZTM3fWdqDWQ/edit?gid=0#gid=0"
+    url = "https://docs.google.com/spreadsheets/d/1RlNYrWWezvHQfceEgmHIkC-c7dnIxRIWZTM3fWdqDWQ/edit?gid=0#gid=0"           
     ddf = conn.read(spreadsheet=url)
     ncols = ['채권', '불량', '잔액', '총분양금', '대출잔액']
     for col in ncols:
@@ -811,8 +944,7 @@ elif menu == "중도금결산":
                                       aggfunc='sum', fill_value=0, margins=True, margins_name='합계')
                 st.dataframe(dfp.style.format("{:,.0f}"))
             else:
-                st.warning("조회된 데이터가 없습니다.")
-  
+                st.warning("조회된 데이터가 없습니다.")      
 
 elif menu == "분양":
     st.subheader('📊 분양현황')
@@ -883,7 +1015,7 @@ elif menu == "분양":
                 c1, c2 = st.columns(2) # %가 추가되었으므로 비율을 조금 조정
                 with c1:
                     st.write('동호기준')                                    
-                    st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 세대(실), %)</div>', unsafe_allow_html=True)                                                            
+                    st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 세대(실), %)</div>', unsafe_allow_html=True)
                     styled_df = dfp.style.apply(style_fill_col, axis=0)
                     styled_df = styled_df.format({'계약(%)': '{:.0f}', '미계약(%)': '{:.0f}'})
                     st.dataframe(styled_df, use_container_width=True, hide_index=True)                    
@@ -1558,8 +1690,14 @@ elif menu == "인구":
                 ddf[col] = ddf[col].astype(int)
                 
         col1, col2 = st.columns(2)
-        with col1: region = st.text_input('지역입력')
-        with col2: dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))               
+        with col1:
+            st.write('개략조회')
+            region = st.text_input('지역입력')
+            dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))
+            
+        with col2:
+            
+            dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))               
         if st.button('조회'):
             cond = (ddf['행정기관'].str.contains(region)) & (ddf['기준월'] == dday)
             dff = ddf[cond]
@@ -1593,7 +1731,8 @@ elif menu == "미분양":
     
     st.subheader('🏠 시군구별 미분양')
     col1, col2 = st.columns(2)
-    with col1: region = st.selectbox('시도 선택', sorted(data['구분'].unique()), index=1)       
+    #with col1: region = st.selectbox('시도 선택', sorted(data['구분'].unique()), index=1)       
+    with col1: region = st.selectbox('시도 선택', ['전체'] + sorted(data['구분'].unique()))
     with col2: dday = st.selectbox('기준월 선택', sorted(data.columns[3:], reverse=True))           
     if st.button('조회'):
         scol1, scol2 = st.columns(2)
@@ -1612,11 +1751,16 @@ elif menu == "미분양":
                 
         with scol2:
             # 1. 행 조건 설정 (구분에 region이 포함된 행)            
-            row_cond = data['구분'].str.contains(region, na=False)    
+            sel_cols = ['구분','시군구', dday] # 보여주고 싶은 컬럼 리스트
+            if region == '전체':
+                dff = data.loc[:, sel_cols]                     
+            else:
+                row_cond = data['구분'].str.contains(region, na=False)    
+                dff = data.loc[row_cond, sel_cols]                     
             # 2. 행 조건 필터링 + dday 열(컬럼) 선택
             # 필수로 보여야 할 정보(예: '구분')와 선택한 'dday' 열만 추출
-            sel_cols = ['구분','시군구', dday] # 보여주고 싶은 컬럼 리스트
-            dff = data.loc[row_cond, sel_cols]                     
+            
+            
             if not dff.empty:
                 st.write(f"📊 {region} 지역 미분양 현황 [{dday}기준]")                                
                 dff[dday] = pd.to_numeric(dff[dday], errors='coerce').fillna(0)                        
@@ -1701,7 +1845,7 @@ elif menu == "소송":
             dff = ddf[cond].copy()
             if not dff.empty:
                 dfp = dff.pivot_table(index=['판결여부','소송규모','사건명','접수일','원고','기일차수','최종일자'], values='원고수', aggfunc='sum').reset_index()
-                dfp = dfp.sort_values(['소송규모','접수일'], ascending=[False, True])                
+                dfp = dfp.sort_values(['소송규모','접수일'], ascending=[False, True]) 
 # =============================================================================
 #                 ncols = dff.select_dtypes(include=['number']).columns
 #                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
@@ -1717,4 +1861,3 @@ elif menu == "소송":
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
-
