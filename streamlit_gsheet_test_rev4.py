@@ -6,22 +6,23 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import numpy as np
-import io, os
+
 import datetime
 import requests as rq
 from pandas.tseries.offsets import MonthEnd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+import os, io
 import plotly.express as px
 import pymysql
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-os.chdir(current_dir)  # 현재 디렉토리로 이동
+cur_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(cur_dir)  # 현재 디렉토리로 이동
+load_dotenv()
 
 # --- 설정 및 스타일 ---
 st.set_page_config(page_title="MANAGE", layout="wide")
 # ==================== 로그인 로직 추가 ====================
-load_dotenv()
 
 def get_engine():
     # 로컬 .env 또는 서버 환경 변수에서 가져옴
@@ -158,9 +159,10 @@ def check_login():
     
     return True # 로그인 완료 상태
 
-# 3. 로그인 체크 실행
+# 3. 로그인 체크 실행 (로그인 적용여부)
 if not check_login():
     st.stop()
+
 
 # ==========================================================
 st.markdown("""
@@ -173,46 +175,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True) 
     
-# --- 공통 연결 객체 및 함수 ---
-conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_gspread_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     # 기존에 사용하시던 JSON 키 경로를 그대로 입력하세요.
     SERVICE_ACCOUNT_FILE = r'K:/pyenv/py311/py_gsheet/python-gsheet-484713-be4d9602c973.json'
-    ##SERVICE_ACCOUNT_FILE = 'python-gsheet-484713-be4d9602c973.json'
+
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
     return gspread.authorize(creds)
-
-def style_fill_col(col):    
-    style = ['' for _ in col]    
-    if col.name in ['계약(%)','완납(%)','소송(%)']:
-        #style = ['background-color: yellow' for _ in col]
-        style = ['color: yellow' for _ in col] # 컬럼명이 '계약(%)'인 경우에만 노란색 또는 배경 적용
-    return style
-
-def style_fill_row(row):
-    name = row.name #해당 row(행)의 인덱스(Index) 이름    
-    #isinstance(name, tuple): 만약 인덱스가 멀티 인덱스라면 ('대분류', '항목명')처럼 튜플(Tuple) 형태가 됩니다.
-    #이 경우 name[1]을 선택해 실제 항목명인 '항목명'만 가져옵니다.
-    item_name = name[1] if isinstance(name, tuple) else name        
-    if item_name in ['영업이익','원가율','경상이익','소계','과부족']:
-        return ['background-color: black'] * len(row)    
-    return [''] * len(row)
-    #조건에 맞지 않으면: 빈 문자열('')을 반환하여 기본 스타일을 유지합니다.
-    # * len(row)를 하는 이유는 행의 모든 칸(Cell) 개수만큼 스타일 정보를 리스트로 전달해야 하기 때문입니다.
-def style_by_date(col):
-    # 컬럼 이름이 '상품'이나 '구분'이면 스타일 적용 안 함
-    if col.name in ['상품', '구분']:
-        return [''] * len(col)            
-    try:
-        # 컬럼명(약정월)을 날짜 객체로 변환
-        col_date = pd.to_datetime(col.name)
-        # 전월 말일보다 작거나 같으면 회색(#9E9E9E), 아니면 검정색
-        color = 'color: #9E9E9E;' if col_date <= threshold_date else 'color: white;'
-        return [color] * len(col)
-    except:
-        return [''] * len(col)
 
 
 @st.cache_data
@@ -256,7 +226,7 @@ def load_sigungu():
     return data
 
 def get_applyhome_list(area, date):
-    load_dotenv()
+    #load_dotenv()
     mykey1 = os.getenv("mykey1")
     #st.write(mykey1)
     url = (
@@ -308,23 +278,74 @@ def get_applyhome_detail(manage_no):
             
     return pd.DataFrame()
 
+
+
+def style_fill_col(col):    
+    style = ['' for _ in col]    
+    if col.name in ['계약(%)','완납(%)','소송(%)']:
+        #style = ['background-color: yellow' for _ in col]
+        style = ['background-color: yellow' for _ in col] # 컬럼명이 '계약(%)'인 경우에만 노란색 적용        
+    return style
+
+def style_fill_row(row):
+    name = row.name #해당 row(행)의 인덱스(Index) 이름    
+    #isinstance(name, tuple): 만약 인덱스가 멀티 인덱스라면 ('대분류', '항목명')처럼 튜플(Tuple) 형태가 됩니다.
+    #이 경우 name[1]을 선택해 실제 항목명인 '항목명'만 가져옵니다.
+    item_name = name[1] if isinstance(name, tuple) else name        
+    if item_name in ['영업이익','원가율','경상이익','소계','과부족']:
+        return ['background-color: black'] * len(row)    
+    return [''] * len(row)
+    #조건에 맞지 않으면: 빈 문자열('')을 반환하여 기본 스타일을 유지합니다.
+    # * len(row)를 하는 이유는 행의 모든 칸(Cell) 개수만큼 스타일 정보를 리스트로 전달해야 하기 때문입니다.
+    
+def style_by_date(col):
+    # 컬럼 이름이 '상품'이나 '구분'이면 스타일 적용 안 함
+    if col.name in ['상품', '구분']:
+        return [''] * len(col)            
+    try:
+        # 컬럼명(약정월)을 날짜 객체로 변환
+        col_date = pd.to_datetime(col.name)
+        # 전월 말일보다 작거나 같으면 회색(#9E9E9E), 아니면 검정색
+        color = 'color: #9E9E9E;' if col_date <= threshold_date else 'color: white;'
+        return [color] * len(col)
+    except:
+        return [''] * len(col)
+
+
+# --- 공통 연결 객체 및 함수 ---
+gsconn = st.connection("gsheets", type=GSheetsConnection)  #gsconn : google sheet connection
+
 @st.cache_data
-def alv_data():
-    url = "https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=0#gid=0"   
-    #url = "https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=1989275734#gid=1989275734"
-    #str_txt = '프로젝트,프로젝트 내역,당월매출,금년매출,누계매출,당월매원,금년매원,누계매원,당사업경비,금사업경비,누사업경비,당용지비,금누계비,누용지비,당월판관비(수주후),금년판관비(수주후),누계판관비(수주후),당월판관비(수주전),금년판관비(수주전),누계판관비(수주전),당월금융비,금년금융비,누계금융비,당현장원가,금현장원가,누현장원가,당공손충,연공손충,누공손충,당월(실)하자보수비,금년(실)하자보수비,누계(실)하자보수비,당기타영업수익,금기타영업수익,누기타영업수익,당기타영업비용,금기타영업비용,누기타영업비용,당이자수익,금이자수익,누이자수익,당이자비용,금이자비용,누이자비용,기준월'
-    #col_list = list(str_txt.split(","))
+def alv_data(target_month=None):
+    # 1. 데이터 로드
+    url = "https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=1989275734#gid=1989275734"
+    rdf = gsconn.read(spreadsheet=url)
     
-    ddf = conn.read(spreadsheet=url)      
-    df = pd.DataFrame(ddf)       
-    #df = df[col_list]
-    # 문자열 컬럼 제외하고 모두 숫자형으로 변환
+    if target_month is None:
+        valid_months = rdf[~rdf['기준월'].isin(['nan', '', 'None'])]['기준월']
+        if valid_months.empty: return pd.DataFrame()
+        filter_month = valid_months.max()
+    else:
+        filter_month = target_month    
+    
+    df_month = rdf[rdf['기준월'] == filter_month].copy()    
+    
+    str_txt = '프로젝트,프로젝트 내역,당월매출,금년매출,누계매출,당월매원,금년매원,누계매원,당사업경비,금사업경비,누사업경비,당용지비,금누계비,누용지비,당월판관비(수주후),금년판관비(수주후),누계판관비(수주후),당월판관비(수주전),금년판관비(수주전),누계판관비(수주전),당월금융비,금년금융비,누계금융비,당현장원가,금현장원가,누현장원가,당공손충,연공손충,누공손충,당월(실)하자보수비,금년(실)하자보수비,누계(실)하자보수비,당기타영업수익,금기타영업수익,누기타영업수익,당기타영업비용,금기타영업비용,누기타영업비용,당이자수익,금이자수익,누이자수익,당이자비용,금이자비용,누이자비용,기준월'
+    col_list = list(str_txt.split(","))
+    
+    df = df_month[col_list]
+    
     base_cols = ['프로젝트', '프로젝트 내역', '기준월']
-    for col in df.columns:
-        if col not in base_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    num_cols = [c for c in df.columns if c not in base_cols]
     
-    dff = df.melt(id_vars=base_cols, var_name='항목', value_name='값')
+    #먼저 데이터를 문자열로 바꾸고 콤마(,)를 제거하고, 숫자변환하고, 오류는 Nan처리후 결측치를 0으로 채우고 정수형으로 변환    
+    for col in num_cols:
+        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0).astype(int)
+
+    # 데이터 구조 변경 (가로 -> 세로)
+    # 각 항목(당월매출, 누계매출 등)을 '항목'이라는 이름의 행으로 보냅니다.
+    dff = df.melt(id_vars=['프로젝트', '프로젝트 내역', '기준월'], var_name='항목', value_name='값')
+
     # '기간기준' 조건 열 추가 (Power Query의 '조건 열이 추가됨' 단계) : np.select로 효율적으로 구현
     p_conds = [
         dff['항목'].str.contains('누계금'),
@@ -361,10 +382,10 @@ def alv_data():
     final_cols = ["프로젝트", "프로젝트 내역", "기준월", "기간기준", "항목기준", "항목", "값"]
     dff = dff[final_cols]
     return dff
-  
+
+    
 
 # --- 사이드바(로그인후) ---
-
 with st.sidebar:
     with st.sidebar:            
 # =============================================================================
@@ -391,13 +412,159 @@ with st.sidebar:
 #                     st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
 #                     st.rerun()
 # =============================================================================
-        items = ["옵션선택","사업개요","분양","동호약정납부", "자금수지","채권","PF현황","실적조회","소송","중도금결산", "중도금","실거래조회", "입주예정","인구","미분양", "pjcode"] #청약홈조회
+        items = ["옵션선택","사업개요","실적조회","분양","동호약정납부","PF현황","중도금대출","자금수지","채권","소송","PJ도급","pjcode","실거래조회", "입주예정","인구","미분양",] #청약홈조회
         menu = option_menu("Manage", items,
                        #icons=["dash","info-circle", "bank", "bank", "bank", "bank","bank","house","house","house","house"],
                        icons=["dash"] + ["info-circle"]*len(items),
                        menu_icon="cast", default_index=0)
+
 # --- 메뉴별 로직 ---
-if menu == "pjcode":
+
+if menu == '실적조회':
+    st.write("### SAP 실적조회")    
+    if 'sel_pj' not in st.session_state:
+        st.session_state.sel_pj = None
+    
+    url = "https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=1989275734#gid=1989275734"
+    rdf = gsconn.read(spreadsheet=url)
+    rdf['기준월'] = rdf['기준월'].astype(str).str.strip()
+    month_list = sorted(rdf.loc[~rdf['기준월'].isin(['nan', '', 'None']), '기준월'].unique(), reverse=True)
+        
+    col1, col2, col3 = st.columns([3, 3, 3])
+    
+    with col2:        
+        dday = st.selectbox('기준월 선택', month_list)        
+        
+    # [핵심] 선택된 dday를 인자로 전달하여 해당 월의 가공 데이터(df) 생성    
+    df = alv_data(target_month=dday)    
+    if df.empty:
+        st.warning(f"⚠️ {dday} 기준 조회된 데이터가 없습니다.")
+        st.stop()
+
+    with col1:        
+        pjs = sorted(df['프로젝트 내역'].unique())
+        # [핵심] index 설정: 세션에 저장된 값이 옵션 목록에 있으면 해당 위치를 기본값으로 설정
+        default_index = 0
+        if st.session_state.sel_pj in pjs:
+            default_index = pjs.index(st.session_state.sel_pj)
+        
+        # 프로젝트 선택 시 세션 상태 업데이트
+        pj = st.selectbox('(본공사)사업명 선택', pjs, index=default_index, key='pj_selector')
+        st.session_state.sel_pj = pj # 선택한 값을 세션에 저장        
+        
+        # 옵션공사 맵핑용 시트 조회
+        url_pair = 'https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=1549480112#gid=1549480112'
+        df_pair = gsconn.read(spreadsheet=url_pair)
+        pj2 = next(iter(df_pair.loc[df_pair['pj'] == pj, 'pjo']), None)        
+    
+    with col3:     
+        st.markdown('<p style="margin-bottom: 28px;"></p>', unsafe_allow_html=True)
+        sch_button = st.button('조회', use_container_width=True)        
+        
+    
+    if sch_button:
+        df_all = [] 
+        col_order = ['매출', '토지비', '공사비', '경비', '공손충', '하자보수비', '매원', '원가율', '매출이익',
+                  '판관비', '영업이익', '기타영업수익', '기타영업비용', '금융비', '이자수익', '이자비용', '경상이익']
+        period_order = ['당월', '금년', '누계']
+    
+        # 스타일 및 원가율 % 포맷팅 함수
+        def apply_custom_styling(df):
+            styler = df.style.apply(style_fill_row, axis=1).set_properties(**{
+                'padding-top': '0px', 'padding-bottom': '0px', 'line-height': '1', 'font-size': '10px'
+            })
+            styler = styler.format("{:,.0f}")
+            for idx in df.index:
+                if idx[1] == '원가율':
+                    styler = styler.format(subset=(idx, slice(None)), formatter="{:.1f}%")
+            return styler
+    
+        # 공통 지표 계산 및 데이터프레임 생성 함수
+        def common_process(df, pj_name):
+            idx_cols = ['프로젝트', '프로젝트 내역', '기준월', '기간기준']
+            
+            def get_series(tdf, category):
+                return tdf[tdf['항목기준'] == category].groupby(idx_cols)['값'].sum()
+    
+            def create_row(series, name):
+                res = series.to_frame(name='값').reset_index()
+                res['항목기준'] = name
+                return res
+    
+            # 1. 항목별 Series 추출
+            s_sales = get_series(df, '매출')
+            s_cost = get_series(df, '매원')
+            s_sg_a = get_series(df, '판관비')
+            s_oth_i = get_series(df, '기타영업수익')
+            s_oth_e = get_series(df, '기타영업비용')
+            s_int_i = get_series(df, '이자수익')
+            s_int_e = get_series(df, '이자비용')
+            s_fin = get_series(df, '금융비')
+    
+            # 2. 산식 계산
+            gp_val = s_sales.sub(s_cost, fill_value=0) # 매출이익
+            op_val = gp_val.sub(s_sg_a, fill_value=0)  # 영업이익
+            ord_val = (op_val.add(s_oth_i, fill_value=0)
+                             .sub(s_oth_e, fill_value=0)
+                             .add(s_int_i, fill_value=0)
+                             .sub(s_int_e, fill_value=0)
+                             .sub(s_fin, fill_value=0)) # 경상이익
+            
+            # 3. 데이터프레임 행 생성
+            gp_df = create_row(gp_val, '매출이익')
+            op_df = create_row(op_val, '영업이익')
+            ord_df = create_row(ord_val, '경상이익')
+            
+            # 4. 결합 및 카테고리 정렬
+            # (원가율은 피벗 후 정확한 재계산을 위해 여기서 합치지 않고 피벗 테이블에서 직접 처리 권장)
+            dfc = pd.concat([df, gp_df, op_df, ord_df], ignore_index=True)
+            dfc['항목기준'] = pd.Categorical(dfc['항목기준'], categories=col_order, ordered=True)
+            dfc['기간기준'] = pd.Categorical(dfc['기간기준'], categories=period_order, ordered=True)
+            
+            # 5. 피벗 테이블 생성
+            dfp = dfc.pivot_table(index=['프로젝트', '항목기준'], columns='기간기준', values='값', aggfunc='sum', observed=False)
+            
+            # 6. [중요] 원가율 재계산 (단순 합산 방지)
+            #행 인덱스에서 첫 번째 레벨(프로젝트)은 전체(slice(None))를 선택하고, 두 번째 레벨(항목기준)이 '원가율'인 행들만 가져온 뒤, 모든 컬럼(:)을 표시해라.
+            try:
+                dfp.loc[(slice(None), '원가율'), :] = (
+                    dfp.loc[(slice(None), '매원'), :].values / 
+                    dfp.loc[(slice(None), '매출'), :].replace(0, np.nan).values
+                ) * 100
+            except: pass
+                
+            return dfp
+    
+        # --- A. 본공사 데이터 처리 ---
+        with col1:
+            st.markdown("본공사")
+            dff_main = df[df['프로젝트 내역'] == pj].copy()
+            if not dff_main.empty:
+                p_main = common_process(dff_main, pj)
+                st.dataframe(apply_custom_styling(p_main), use_container_width=True, height=630)
+                df_all.append(dff_main)
+    
+        # --- B. 옵션공사 데이터 처리 ---
+        with col2:
+            if pj2:
+                st.markdown("옵션공사")
+                dff_opt = df[df['프로젝트 내역'] == pj2].copy()
+                if not dff_opt.empty:
+                    p_opt = common_process(dff_opt, pj2)
+                    st.dataframe(apply_custom_styling(p_opt), use_container_width=True, height=630)
+                    df_all.append(dff_opt)
+    
+        # --- C. 합계 데이터 처리 ---
+        with col3:
+            if len(df_all) > 1:
+                st.markdown("합계")
+                df_total = pd.concat(df_all, ignore_index=True)
+                df_total['프로젝트'] = '합계'
+                p_total = common_process(df_total, '합계')
+                st.dataframe(apply_custom_styling(p_total), use_container_width=True, height=630)
+
+
+elif menu == "pjcode":
     st.subheader('📊 pjcode 조회/입력')            
     # 1. 인증 및 시트 연결
     client = get_gspread_client()
@@ -456,17 +623,38 @@ if menu == "pjcode":
                 else:
                     st.warning("⚠️ 본공사와 옵션공사 코드를 모두 입력해주세요.")
 
+elif menu == 'PJ도급':
+    st.subheader('📊 PJ도급 수입전망')
+    st.write('단위:백만원')
+    url ='https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=764755693#gid=764755693'    
+    rdf = gsconn.read(spreadsheet=url).fillna("")
+    num_cols = rdf.columns[4:] 
+
+    format_dict = {}
+    
+    for col in num_cols:
+        if col == '면세율':
+            # 면세율: 숫자라면 소수점 1자리 퍼센트, 0이면 빈칸, 문자는 그대로
+            format_dict[col] = lambda x: f"{x:.1%}" if (isinstance(x, (int, float)) and x != 0) else ("" if x == 0 else x)
+        else:
+            # 나머지 숫자 컬럼: 숫자라면 천 단위 콤마, 0이면 빈칸, 문자는 그대로 (에러 방지)
+            format_dict[col] = lambda x: f"{x:,.0f}" if (isinstance(x, (int, float)) and x != 0) else ("" if x == 0 else x)
+    
+    # 2. 스타일 적용 및 출력
+    styled_rdf = rdf.style.format(format_dict)
+    
+    st.dataframe(styled_rdf, use_container_width=True, hide_index=True)
+
 
 elif menu == "사업개요":
     st.subheader('📊 사업개요')
-    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=0#gid=0"    
-    
-    data = conn.read(spreadsheet=url, usecols=list(range(15))).fillna("")        
+    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=0#gid=0"        
+    data = gsconn.read(spreadsheet=url, usecols=list(range(15))).fillna("")        
     pj_list = ["전체 조회"] + data['사업명'].drop_duplicates().tolist()        
     sel_pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)        
     
     if st.button('조회'):
-        data2 = conn.read(spreadsheet=url, usecols=[1] + list(range(17, 41))).fillna("")        
+        data2 = gsconn.read(spreadsheet=url, usecols=[1] + list(range(17, 41))).fillna("")        
         # 필터링 조건 설정
         is_all = sel_pj == "전체 조회"  #sel_pj이 "전체 조회"인지 확인합니다.결과는 True 또는 False (Boolean) 값으로 is_all 변수에 저장
         dff = data if is_all else data[data['사업명'] == sel_pj] #파이썬 삼항연산자        
@@ -518,30 +706,38 @@ elif menu == "사업개요":
 elif menu == "PF현황":
     st.subheader('📊 PF현황 조회')
     url = "https://docs.google.com/spreadsheets/d/1G4GJIXw36pKUoPgAR2I8yQ0zcTKoscwAoNW5nu7oNPI/edit?gid=0#gid=0"
-    ddf = conn.read(spreadsheet=url, usecols=[0,1,2,3,4,5,6,7,11,12,14])
+    rdf = gsconn.read(spreadsheet=url, usecols=[0,1,2,3,4,5,6,7,11,12,14])
     ncols = ['약정','기표','상환','잔액']  #숫자칼럼 명시
     for col in ncols:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
     
     col1, col2 = st.columns(2)
-    pj_list = ddf['PJ명'].drop_duplicates().tolist()        
+    pj_list = rdf['PJ명'].drop_duplicates().tolist()        
     with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)            
-    with col2: dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))       
+    with col2: dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True))       
         
     if st.button('조회'):
-        cond = (ddf['기준월'] == dday)
+        cond = (rdf['기준월'] == dday)
         if pj:
-            cond &= ddf['PJ명'].str.contains(pj, na=False, case=False)
-            dff = ddf[cond].copy()
+            cond &= rdf['PJ명'].str.contains(pj, na=False, case=False)
+            dff = rdf[cond].copy()
             if not dff.empty:
-                ncols = dff.select_dtypes(include=['number']).columns
-                config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
-                st.dataframe(dff, use_container_width=True, hide_index=True, column_config=config)
+                dff['약정'] = dff['약정'] / 100000000
+                dff['기표'] = dff['기표'] / 100000000
+                dff['상환'] = dff['상환'] / 100000000
+                dff['잔액'] = dff['잔액'] / 100000000
+                dff_sty = dff.style.format(thousands=",", precision=0)
+# =============================================================================
+#                 ncols = dff.select_dtypes(include=['number']).columns
+#                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
+#                 st.dataframe(dff, use_container_width=True, hide_index=True, column_config=config)
+# =============================================================================
+                st.dataframe(dff_sty, use_container_width=True, hide_index=True)
                 target_col = '잔액'
                 if target_col and target_col in dff.columns:
                     total_val = dff[target_col].sum()            
-                    st.metric(label=f"💰 {target_col} 합계", value=f"{total_val:,.0f} 원")
+                    st.metric(label=f"💰 {target_col} 합계", value=f"{total_val:,.0f} 억원")
         else:
             st.warning("조회된 결과가 없습니다.")            
 
@@ -549,18 +745,18 @@ elif menu == "PF현황":
 elif menu == "동호약정납부":
     st.subheader('📊 동호약정 납입현황')
     
-    sid = {
+    sht_id = {
         '벤처밸리': 'https://docs.google.com/spreadsheets/d/1N1qhgvhoVBWtuF6LfBPjaRGX6kawiUWpc0bJb8vBDgM/edit?gid=0#gid=0',
         '시민공원': 'https://docs.google.com/spreadsheets/d/1N1qhgvhoVBWtuF6LfBPjaRGX6kawiUWpc0bJb8vBDgM/edit?gid=767298303#gid=767298303',
         '시화디오션': 'https://docs.google.com/spreadsheets/d/1N1qhgvhoVBWtuF6LfBPjaRGX6kawiUWpc0bJb8vBDgM/edit?gid=1762659893#gid=1762659893',
         }
-    opt = sid.keys()
+    opt = sht_id.keys()
     sel_pj = st.selectbox('사업명 선택', opt)
 
     if st.button('조회'):
-        url = sid[sel_pj]      
-        ddf = conn.read(spreadsheet=url)    
-        df = ddf[ddf['동']!='합계']
+        url = sht_id[sel_pj]      
+        rdf = gsconn.read(spreadsheet=url)    
+        df = rdf[rdf['동']!='합계']
 
         # [수정 포인트 1] 그룹화하기 전, 가장 먼저 숫자형으로 변환합니다.
         # 금액 컬럼들에 콤마(,)가 있을 수 있으므로 제거 후 변환합니다.
@@ -569,14 +765,33 @@ elif menu == "동호약정납부":
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
-        #df["동호수"] = df["동"].astype(str) + "-" + df["호수"].astype(str)
         # fillna(0)는 결측치가 있을 경우 에러를 방지하기 위함입니다.
-        df["동호수"] = (
-            df["동"].fillna(0).astype(int).astype(str) + 
-            "-" + 
-            df["호수"].fillna(0).astype(int).astype(str).str.zfill(4))
+# =============================================================================
+#          1. 동호수 생성 시 정수형 변환 후 문자열 결합 (소수점 제거 핵심)
+#         df["동호수"] = (
+#             df["동"].fillna(0).astype(int).astype(str) + 
+#             "-" + 
+#             df["호수"].fillna(0).astype(int).astype(str).str.zfill(4))
+# =============================================================================
+        def format_dong(x):
+            if pd.isna(x): return "0"
+            try:
+                # 숫자로 변환 가능하면 소수점 제거 후 문자열화 (101.0 -> 101)
+                return str(int(float(x)))
+            except (ValueError, TypeError):
+                # 'A'와 같은 문자면 그대로 반환
+                return str(x)
         
+        # 2. '호수' 컬럼 처리: 4자리 zfill 적용
+        def format_hosu(x):
+            if pd.isna(x): return "0000"
+            try:
+                return str(int(float(x))).zfill(4)
+            except (ValueError, TypeError):
+                return str(x).zfill(4)
         
+        # 데이터프레임 적용
+        df["동호수"] = df["동"].apply(format_dong) + "-" + df["호수"].apply(format_hosu)                 
         
         df["상품"] = df["세대속성"].str.split("/").str[0]    
         df = df[df["주택형"] != "소계"].copy()    
@@ -626,8 +841,10 @@ elif menu == "동호약정납부":
         
         def highlight_row(row):
             # '구분' 컬럼이 '납부원금'이면 lightyellow, 아니면 빈 문자열(기본값)
-            color = 'color: lightyellow' if row['구분'] == '납부원금' else ''
+            color = 'background-color: lightyellow; color: black; font-weight: bold' if row['구분'] == '납부원금' else ''
             return [color] * len(row)
+        
+        
 
         # 3. 스타일 적용 및 출력
         # 기존 style_by_date(열 기준 스타일)와 highlight_row(행 기준 스타일)를 체이닝하여 적용
@@ -642,12 +859,14 @@ elif menu == "동호약정납부":
         c1, c2 = st.columns([3,7])
         with c1:
             st.subheader('상품별 중도금납부현황')
-            df_mid = dfg[dfg['차수'].str.contains('차', na=False)].copy()
-            df_mid = df_mid[['동호수','상품','차수','차수구분','납부원금']]        
+            df_mid = dfg[dfg['차수'].str.contains('차', na=False)].copy() #중도금만 : 1차, 2차
+            df_mid = df_mid[['동호수','상품','차수','차수구분','약정금액','납부원금']]        
             #df_mid.rename(columns={'납부원금': '납부중도금'}, inplace=True)
-            dfp2 = df_mid.pivot_table(index=['상품'], values='납부원금', aggfunc='sum',fill_value=0, margins=True, margins_name='합계').reset_index()
+            dfp2 = df_mid.pivot_table(index=['상품'], values=['약정금액','납부원금'], aggfunc='sum',fill_value=0, margins=True, margins_name='합계').reset_index()
             dfp2_disp = dfp2.copy()
+            dfp2_disp['약정금액'] = dfp2_disp['약정금액'] / 1000000            
             dfp2_disp['납부원금'] = dfp2_disp['납부원금'] / 1000000            
+
             st.dataframe(dfp2_disp.style.format(precision=0, thousands=","), use_container_width=True, hide_index=True)                    
         
         with c2:
@@ -690,19 +909,18 @@ elif menu == "동호약정납부":
 elif menu == "자금수지":
     st.subheader('📊 자금수지 조회')
     url = "https://docs.google.com/spreadsheets/d/18AhC-xVCGMpapdZwpptxnkED3_sO18B7qDeKz-4oa60/edit?gid=0#gid=0"
-    ddf = conn.read(spreadsheet=url)    
-    ddf = ddf[ddf['수지구분']=='영업수지']  #영업수지만..
-    
-    # 0. 숫자 데이터 전처리
+    rdf = gsconn.read(spreadsheet=url)    
+    rdf = rdf[rdf['수지구분']=='영업수지']  #영업수지만..
+        
     ncols = ['금액']
     for col in ncols:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
     # 1. 입력 UI (사업명 및 기준월 선택)
     col1, col2, col3 = st.columns(3)
-    pj_list = ddf['사업명'].drop_duplicates().tolist()
-    unique_months = sorted(ddf['기준월'].unique(), reverse=True)
+    pj_list = rdf['사업명'].drop_duplicates().tolist()
+    unique_months = sorted(rdf['기준월'].unique(), reverse=True)
     
     with col1: 
         pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)
@@ -711,7 +929,7 @@ elif menu == "자금수지":
     with col3:
         # 화면에 표시를 시작할 시점 (출력월) 설정
         # 기본값을 '2025-09' 등으로 설정하거나 리스트에서 선택하게 할 수 있습니다.
-        print_month = st.date_input('출력 시작월 선택', value=pd.to_datetime('2025-11-30'))
+        print_month = st.date_input('출력 시작월 선택', value=pd.to_datetime('2025-12-31'))
     
     # 지난달(last_month) 자동 계산 로직
     if len(unique_months) >= 2:
@@ -778,7 +996,7 @@ elif menu == "자금수지":
         dfp = dfp.reindex(final_order)
     
         # (4) 출력 필터링 및 컬럼명 변환
-        sel_cols = [c for c in dfp.columns if (isinstance(c, pd.Timestamp) and c > pd.to_datetime(start_date))]
+        sel_cols = [c for c in dfp.columns if (isinstance(c, pd.Timestamp) and c >= pd.to_datetime(start_date))]
         dis_cols = sel_cols + ['총합계']
         dfp_to_show = dfp[dis_cols].copy()
         
@@ -792,12 +1010,32 @@ elif menu == "자금수지":
     
         # (5) 스타일링 함수
         def apply_styles(styler):
-            def style_rows(row):                
-                
-                target_names = ['수입', '지출', '과부족']  #음영적용
-                is_highlight = row.name in target_names
-                return ['background-color: lightyellow; color: black; font-weight: bold' if is_highlight else '' for _ in row]
+# =============================================================================
+#             def style_rows(row):                
+#                 target_names = ['수입', '지출', '과부족']  #음영적용                
+#                 is_highlight = row.name in target_names
+#                 return ['background-color: lightyellow; color: black; font-weight: bold' if is_highlight else '' for _ in row]
+# =============================================================================            
+            def style_rows(row):
+            # 1. 색상 및 스타일 정의
+                income_style = 'background-color: lightblue; color: black; font-weight: bold'
+                expense_style = 'background-color: lightyellow; color: black; font-weight: bold'
+                shortage_style = 'font-weight: bold' # 과부족용 (선택사항)
+        
+                # 2. 행 이름(row.name)에 따른 조건부 스타일 선택
+                if '수입' == str(row.name):
+                    style = income_style
+                elif '지출' == str(row.name):
+                    style = expense_style
+                elif '과부족' == str(row.name):
+                    style = shortage_style
+                else:
+                    style = ''
+                # 3. 해당 행의 모든 셀에 스타일 적용
+                return [style for _ in row]                    
+            
             return styler.apply(style_rows, axis=1)
+            
     
         # (6) 최종 렌더링
         st.write(f"### {title_text}")
@@ -810,95 +1048,68 @@ elif menu == "자금수지":
     # 3. 조회 실행
     if st.button('조회'):
         # 공통 사업명 필터
-        pj_cond = ddf['사업명'].str.contains(pj, na=False, case=False) if pj else True
+        pj_cond = rdf['사업명'].str.contains(pj, na=False, case=False) if pj else True
         
         # (A) 이번 달 출력
-        cond_now = (ddf['기준월'] == dday) & pj_cond
+        cond_now = (rdf['기준월'] == dday) & pj_cond
         # 마지막 인자로 print_month를 반드시 넣어주어야 합니다.
-        make_styled_df(ddf[cond_now], f"📊 당월전망: {dday}", print_month) 
+        make_styled_df(rdf[cond_now], f"📊 당월전망: {dday}", print_month) 
         
         # (B) 지난 달 출력
         if last_month:
-            cond_last = (ddf['기준월'] == last_month) & pj_cond
+            cond_last = (rdf['기준월'] == last_month) & pj_cond
             # 여기도 마찬가지로 print_month를 추가합니다.
-            make_styled_df(ddf[cond_last], f"📊 전월전망 ({last_month})", print_month)
+            make_styled_df(rdf[cond_last], f"📊 전월전망 ({last_month})", print_month)
             
             
-        #차트  
-        cond_now = (ddf['기준월'] == dday) & pj_cond
-        df_now = ddf[cond_now].copy()
-
-        if not df_now.empty:
-            # 데이터 가공: 수입 - 지출 계산
-            df_now['집행월'] = pd.to_datetime(df_now['집행월'])
-            df_chart = df_now.pivot_table(index='집행월', columns='구분', values='금액', aggfunc='sum', fill_value=0)            
-            # 수입/지출 컬럼 존재 여부 확인 후 과부족 계산
-            inc = df_chart['수입'] if '수입' in df_chart.columns else 0
-            exp = df_chart['지출'] if '지출' in df_chart.columns else 0
-            
-            # 월별 누계과부족 계산
-            df_chart['누계과부족'] = (inc - exp).cumsum()
-            # 출력범위 결정            
-            df_chart = df_chart.reset_index()
-            df_chart = df_chart[df_chart['집행월'].dt.year <= datetime.datetime.now().year]            
-
-            st.write(f"#### 📈 {dday} 기준 누계과부족 추이")
-
-            # 1. Y축 대칭 범위를 위한 최대 절대값 계산            
-            max_val = df_chart['누계과부족'].abs().max() * 1.1 
-            
-            fig = px.line(
-                df_chart, 
-                x='집행월', 
-                y='누계과부족',
-                markers=True,
-                #text=df_chart['누계과부족'].apply(lambda x: f"{x:,.0f}") # 텍스트 라벨에도 콤마 추가
-            )            
-            # 차트 레이아웃 설정
-            #fig.update_traces(textposition="top center", line_color="#007BFF")            
-            fig.update_layout(
-                xaxis_title="집행월",
-                yaxis_title="금액 (백만원)",
-                hovermode="x unified",
-                xaxis=dict(tickformat="%Y-%m"),
-                
-                # Y축 설정 변경
-                yaxis=dict(
-                    tickformat=",d",        # 'k' 대신 천 단위 콤마 표시 (정수형)
-                    range=[-max_val, max_val] # 0을 기준으로 -최대값 ~ +최대값 대칭 설정
-                )
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+        
     
         
 elif menu == "채권":
     st.subheader('📊 채권현황 조회')
     url = "https://docs.google.com/spreadsheets/d/1RlNYrWWezvHQfceEgmHIkC-c7dnIxRIWZTM3fWdqDWQ/edit?gid=0#gid=0"           
-    ddf = conn.read(spreadsheet=url)
+    rdf = gsconn.read(spreadsheet=url)
     ncols = ['채권', '불량', '잔액', '총분양금', '대출잔액']
     for col in ncols:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
     
     col1, col2 = st.columns(2)
-    pj_list = ddf['손익센터명'].drop_duplicates().tolist()        
-    with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)            
-    with col2: dday = st.selectbox('기준월 선택 ', sorted(ddf['기준월'].unique(), reverse=True))
+    pj_list = rdf['그룹코드'].drop_duplicates().tolist()        
+    with col1: pj = st.selectbox('조회할 그룹코드를 선택하세요', pj_list)            
+    with col2: dday = st.selectbox('기준월 선택 ', sorted(rdf['기준월'].unique(), reverse=True))
 
     if st.button('조회'):
-        cond = (ddf['기준월'] == dday)
-        if pj: cond &= ddf['손익센터명'].str.contains(pj, na=False, case=False)
-        dff = ddf[cond]        
+        cond = (rdf['기준월'] == dday)
+        if pj: cond &= rdf['그룹코드'].str.contains(pj, na=False, case=False)
+        dff = rdf[cond]        
         if not dff.empty:
-            st.dataframe(dff, use_container_width=True, hide_index=True, 
-                         column_config={"채권": st.column_config.NumberColumn(format="%d")})
+            # 1. 스타일 및 포맷 설정
+            styled_df = dff.style.format({
+                "채권": lambda x: f"{x / 100_000_000:,.1f}억",
+                "불량": lambda x: f"{x / 100_000_000:,.1f}억"  # 백만 단위로 나누고 'M' 접미사 추가
+            })
+        
+            # 2. 메인 데이터프레임 출력
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
             st.divider()
-            grouped = dff.groupby(['계정대분류', '계정소분류'], as_index=False)['채권'].sum()
+            
+            # 3. 그룹화 데이터 계산 및 스타일 적용
+            dfg = dff.groupby(['계정대분류', '계정소분류'], as_index=False)['채권'].sum()
+            
+            # 그룹화 데이터에도 동일하게 백만 단위 포맷 적용
+            styled_dfg = dfg.style.format({
+                "채권": lambda x: f"{x / 100_000_000:,.1f}억"
+            })
+            
             c1, c2 = st.columns([2, 1])
-            with c1: st.dataframe(grouped, use_container_width=True, hide_index=True,
-                                  column_config={"채권": st.column_config.NumberColumn(format="%d")})
-            with c2: st.metric(label="💰 총 채권 합계", value=f"{dff['채권'].sum():,.0f} 원")
+            with c1: 
+                st.dataframe(styled_dfg, use_container_width=True, hide_index=True)
+            
+            with c2: 
+                total_m = dff['채권'].sum() / 100_000_000
+                st.metric(label="💰 총 채권 합계", value=f"{total_m:,.1f} 억")
         else:
             st.warning("조회 결과 없음")
 
@@ -910,45 +1121,48 @@ elif menu == "중도금":
         "트라반트": 'https://docs.google.com/spreadsheets/d/1P-f6lZCK7ln1iJEPBUtQqVGWNy-g7G_5iBDYLnWZB-E/edit?gid=453535398',
         "시민공원": 'https://docs.google.com/spreadsheets/d/1P-f6lZCK7ln1iJEPBUtQqVGWNy-g7G_5iBDYLnWZB-E/edit?gid=668236831'
     }
-    ddf = conn.read(spreadsheet=urls[mid_tab])      
+    rdf = gsconn.read(spreadsheet=urls[mid_tab])      
     ncols =['대출잔액']
     for col in ncols:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
     
-    if not ddf.empty:
+    if not rdf.empty:
         # 숫자 컬럼에 대해 콤마 포맷 적용 (%d는 정수형)
-        col_config = {col: st.column_config.NumberColumn(format="%d") for col in ddf.select_dtypes(include=['number']).columns}
+        col_config = {col: st.column_config.NumberColumn(format="%d") for col in rdf.select_dtypes(include=['number']).columns}
         
-        st.dataframe(ddf, use_container_width=True, hide_index=True, column_config=col_config)
+        st.dataframe(rdf, use_container_width=True, hide_index=True, column_config=col_config)
         
         # 4. 하단 합계 표시 (Metric)
-        if '대출잔액' in ddf.columns:
-            total_loan = ddf['대출잔액'].sum()
+        if '대출잔액' in rdf.columns:
+            total_loan = rdf['대출잔액'].sum()
             st.metric(label=f"💰 {mid_tab} 대출잔액 합계", value=f"{total_loan:,.0f} 원")
     else:
         st.warning("조회된 데이터가 없습니다.")
     
 
-elif menu == "중도금결산":
-    st.subheader('🏠 중도금결산자료')
+elif menu == "중도금대출":
+    st.subheader('🏠 중도금대출 결산자료')
     url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=67742981"
-    ddf = conn.read(spreadsheet=url)    
+    rdf = gsconn.read(spreadsheet=url)    
     ncols =['잔액']
     for col in ncols:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
-    pj_list = ddf['사업명'].drop_duplicates().tolist()            
-    pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)                   
+    col1, col2 = st.columns(2)
+    pj_list = rdf['PJ명'].drop_duplicates().tolist()            
+    pj_list = rdf['PJ명'].drop_duplicates().tolist()                
+    with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)            
+    with col2: dday = st.selectbox('기준월 선택 ', sorted(rdf['기준월'].unique(), reverse=True))
     if st.button('조회'):
-        cond = ddf['사업명'].str.contains(pj, na=False, case=False) if pj else [True] * len(ddf)
-        dff = ddf[cond]        
-        dff = ddf[cond][['사업명','상품유형','대출기관','잔액','대출만기일']]
-        col1, col2 = st.columns([6,4])
+        cond = (rdf['PJ명'].str.contains(pj, na=False, case=False) if pj else [True] * len(rdf)) & (rdf['기준월']==dday)
+        dff = rdf[cond]        
+        dff = rdf[cond][['PJ명','상품유형','대출기관','잔액','대출만기일']]
+        col1, col2 = st.columns([5,5])
         with col1:
             if not dff.empty:                                                  
-                dfp = dff.pivot_table(index=['사업명','상품유형', '대출기관'], columns='대출만기일', values='잔액', 
+                dfp = dff.pivot_table(index=['PJ명','상품유형', '대출기관'], columns='대출만기일', values='잔액', 
                                       aggfunc='sum', fill_value=0, margins=True, margins_name='합계')
                 st.dataframe(dfp.style.format("{:,.0f}"))
             else:
@@ -957,27 +1171,27 @@ elif menu == "중도금결산":
 elif menu == "분양":
     st.subheader('📊 분양현황')
     url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=391839077#gid=391839077"
-    data = conn.read(spreadsheet=url)   
+    rdf = gsconn.read(spreadsheet=url)   
            
     ncols = ['입주증번호','총분양금']
     for col in ncols:
-        if col in data.columns:
-            data[col] = pd.to_numeric(data[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
 
-    pj_list = data['사업명'].drop_duplicates().tolist()    
+    pj_list = rdf['사업명'].drop_duplicates().tolist()    
     pj = st.selectbox('사업명 선택', pj_list)    
     search_btn = st.button('조회')
     
     if search_btn:        
         if pj:            
-            cond = data['사업명'].str.contains(pj, na=False, case=False)                    
-            dff = data[cond]    
-            ibju = dff['입주증번호'].sum()
-            lawsuit = (dff['소송']=='소송').sum() #소송 개수
-            if not dff.empty:                
-                dff_total = dff.groupby('상품')['동호수'].count().reset_index(name='총공급')
+            cond = rdf['사업명'].str.contains(pj, na=False, case=False)                    
+            df = rdf[cond]    
+            ibju = df['입주증번호'].sum()
+            lawsuit = (df['소송']=='소송').sum() #소송 개수
+            if not df.empty:                
+                dff_total = df.groupby('상품')['동호수'].count().reset_index(name='총공급')
                 # 1. 피벗 테이블 생성 (계약여부별 동호수 개수)
-                dfp = dff.pivot_table(
+                dfp = df.pivot_table(
                     index='상품', 
                     columns='계약여부', 
                     values='동호수', 
@@ -989,16 +1203,15 @@ elif menu == "분양":
                 if '공급' in dfp.columns:
                     dfp = dfp.sort_values(by='공급', ascending=False)
             
-                # 4. 비율(%) 계산 (합계 칼럼을 기준으로 계산)
-                original_cols = [c for c in dfp.columns if c != '공급'] # 합계 제외한 원래 칼럼들
-                for col in original_cols:
+                cols = [c for c in dfp.columns if c != '공급'] # 합계 제외한 원래 칼럼들
+                for col in cols:
                     dfp[f'{col}(%)'] = (dfp[col] / dfp['공급'] * 100).round(0).fillna(0)
                 # 3. 데이터프레임 정리 (인덱스 초기화)                
                 dfp = dfp[['공급','계약','미계약','계약(%)','미계약(%)']]
                 dfp = dfp.reset_index()
                 
                 
-                dfp2 = dff.pivot_table(
+                dfp2 = df.pivot_table(
                     index='상품', 
                     columns='계약여부', 
                     values='총분양금', 
@@ -1012,8 +1225,7 @@ elif menu == "분양":
                 if '공급' in dfp2.columns:
                     dfp2 = dfp2.sort_values(by='공급', ascending=False)
 
-                original_cols2 = [c for c in dfp2.columns if c != '공급'] # 합계 제외한 원래 칼럼들
-                for col in original_cols2:
+                for col in cols:
                     dfp2[f'{col}(%)'] = (dfp2[col] / dfp2['공급'] * 100).round(0).fillna(0)
                 # 3. 데이터프레임 정리 (인덱스 초기화)                
                 dfp2 = dfp2[['공급','계약','미계약','계약(%)','미계약(%)']]
@@ -1024,47 +1236,42 @@ elif menu == "분양":
                 with c1:
                     st.write('동호기준')                                    
                     st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 세대(실), %)</div>', unsafe_allow_html=True)
-                    styled_df = dfp.style.apply(style_fill_col, axis=0)
-                    styled_df = styled_df.format({'계약(%)': '{:.0f}', '미계약(%)': '{:.0f}'})
-                    st.dataframe(styled_df, use_container_width=True, hide_index=True)                    
-                    #st.dataframe(dfp, use_container_width=True, hide_index=True)
+                    sdf = dfp.style.apply(style_fill_col, axis=0).format({'계약(%)': '{:.0f}%', '미계약(%)': '{:.0f}%'})
+                    st.dataframe(sdf, use_container_width=True, hide_index=True)                                        
                     
                     
                 with c2:
                     st.write('금액기준')                    
                     st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 백만원, %)</div>', unsafe_allow_html=True)                    
-                    styled_df = dfp2.style.apply(style_fill_col, axis=0)
-                    styled_df = styled_df.format({'공급': '{:,.0f}', '계약': '{:,.0f}', '미계약': '{:,.0f}',
-                                                  '계약(%)': '{:.0f}', '미계약(%)': '{:.0f}',
+                    sdf2 = dfp2.style.apply(style_fill_col, axis=0).format({'공급': '{:,.0f}', '계약': '{:,.0f}', '미계약': '{:,.0f}',
+                                                  '계약(%)': '{:.0f}%', '미계약(%)': '{:.0f}%',
                                                   })
-                    st.dataframe(styled_df, use_container_width=True, hide_index=True)                    
+                    st.dataframe(sdf2, use_container_width=True, hide_index=True)                    
                     #st.dataframe(dfp2.style.format(thousands=",", precision=0), use_container_width=True, hide_index=True)                
                 
-                # 1. 계약 데이터 정리
-                # 2. 계약 데이터 정리 (날짜 변환 및 dropna)
-                dffg = dff.groupby(['상품', '계약월'])['동호수'].count().reset_index(name='계약건수')
-                dffg['날짜'] = pd.to_datetime(dffg['계약월'], errors='coerce')
-                dffg = dffg.dropna(subset=['날짜']).sort_values(['상품', '날짜'])
-                dffg['누적계약'] = dffg.groupby('상품')['계약건수'].cumsum()
+                
+                dfg = df.groupby(['상품', '계약월'])['동호수'].count().reset_index(name='계약건수')
+                dfg['날짜'] = pd.to_datetime(dfg['계약월'], errors='coerce')
+                dfg = dfg.dropna(subset=['날짜']).sort_values(['상품', '날짜'])
+                dfg['누적계약'] = dfg.groupby('상품')['계약건수'].cumsum()
                 
                 # 3. 완납 데이터 정리 (ibju > 0 조건은 dff 필터링 단계에서 이미 ibju 합계로 확인 가능)
-                dff_paid = dff[dff['완납여부'] == '완납'].copy()
+                dff_paid = df[df['완납여부'] == '완납'].copy()
                 if not dff_paid.empty:
-                    dffg_paid = dff_paid.groupby(['상품', '완납월'])['동호수'].count().reset_index(name='완납건수')
-                    dffg_paid['날짜'] = pd.to_datetime(dffg_paid['완납월'], errors='coerce')
-                    dffg_paid = dffg_paid.dropna(subset=['날짜']).sort_values(['상품', '날짜'])
-                    dffg_paid['누적완납'] = dffg_paid.groupby('상품')['완납건수'].cumsum()
+                    dfg_paid = dff_paid.groupby(['상품', '완납월'])['동호수'].count().reset_index(name='완납건수')
+                    dfg_paid['날짜'] = pd.to_datetime(dfg_paid['완납월'], errors='coerce')
+                    dfg_paid = dfg_paid.dropna(subset=['날짜']).sort_values(['상품', '날짜'])
+                    dfg_paid['누적완납'] = dfg_paid.groupby('상품')['완납건수'].cumsum()
                 else:
-                    dffg_paid = pd.DataFrame(columns=['상품', '날짜', '누적완납'])
+                    dfg_paid = pd.DataFrame(columns=['상품', '날짜', '누적완납'])
             
                 # 4. 데이터 통합 및 정렬 (날짜순 정렬 필수)
                 combined = pd.merge(
-                    dffg[['상품', '날짜', '누적계약']], 
-                    dffg_paid[['상품', '날짜', '누적완납']], 
+                    dfg[['상품', '날짜', '누적계약']], 
+                    dfg_paid[['상품', '날짜', '누적완납']], 
                     on=['상품', '날짜'], 
-                    how='outer')
-                
-            
+                    how='outer')                
+           
                 # 🌟 [핵심 수정] 정렬 순서를 '날짜' 우선으로 명확히 지정
                 # 날짜 기준으로 먼저 줄을 세워야 '날짜표시'를 만들었을 때 순서가 꼬이지 않습니다.
                 combined = combined.sort_values(by=['날짜', '상품']).reset_index(drop=True)
@@ -1083,48 +1290,60 @@ elif menu == "분양":
                 combined['날짜표시'] = combined['날짜'].dt.strftime('%Y-%m')
                 
                 # --- 그래프 그리기 ---
+                
                 st.markdown("#### 📈 상품별 월별 누적계약률")
+
                 if not combined.empty:
-                    fig1 = px.line(combined, x='날짜표시', y='계약률', color='상품', 
-                                   markers=True, template="plotly_white")                   
+                    # 🌟 [해결 1] Plotly 오류 방지를 위해 데이터프레임을 복사하여 일반 Pandas DF로 확정
+                    chart_data = combined.copy()
                     
-                    # 🌟 [핵심 수정] X축의 순서를 강제로 정렬된 날짜 리스트로 고정합니다.
+                    # 🌟 [해결 2] '날짜표시' 컬럼이 문자열인지 확인 (카테고리형 오류 방지)
+                    chart_data['날짜표시'] = chart_data['날짜표시'].astype(str)
+                
+                    fig1 = px.line(
+                        chart_data,               # 수정된 데이터 사용
+                        x='날짜표시', 
+                        y='계약률', 
+                        color='상품', 
+                        markers=True, 
+                        template="plotly_white"
+                    )                   
+                    
+                    # X축 정렬 설정
                     fig1.update_xaxes(
                         type='category', 
                         categoryorder='array', 
                         categoryarray=sorted_date_strings,
-                        title="계약월"
+                        title="계약월",
+                        tickangle=45  # <--- 이 부분을 추가하세요. -90은 세로 방향입니다.
                     )
+                    
+                    # Y축 포맷 설정
                     fig1.update_yaxes(
                         tickformat=".0%", 
                         range=[0, 1.1],
-                        # 보조 눈금선 설정
                         minor=dict(showgrid=True, nticks=10), 
-                        gridcolor='lightgray',       # 주요 눈금선
-                        #minor_gridcolor='whitesmoke' # 보조 눈금선 (더 밝은 색)
+                        gridcolor='lightgray'
                     )
                     
+                    # 레이아웃 업데이트
                     fig1.update_layout(
-                        yaxis=dict(tickformat=".0%", range=[0, 1.1])
+                        margin=dict(l=20, r=20, t=20, b=20), # 여백 조정 (선택사항)
+                        hovermode="x unified"                # 툴팁 가독성 향상
                     )
+                    
                     st.plotly_chart(fig1, use_container_width=True)
                                 
                 #입주현황표시
                 if ibju > 0:
                     st.divider()               
                     st.subheader('📊 입주현황')                                        
-                    dfp3 = dff.pivot_table(
+                    dfp3 = df.pivot_table(
                         index='상품',
                         columns='완납여부', 
                         values='동호수', 
                         aggfunc='count',
                         fill_value=0)        
-                    # [추가] 필수 컬럼('완납', '미납')이 없을 경우를 대비해 0으로 생성
-# =============================================================================
-#                     for col in ['완납', '미납']:
-#                         if col not in dfp3.columns:
-#                             dfp3[col] = 0
-# =============================================================================
                 
                     # 2. 합계 및 정렬 (초기 공급량 기준 정렬)
                     dfp3['공급'] = dfp3.sum(axis=1)
@@ -1151,7 +1370,7 @@ elif menu == "분양":
                     dfp3 = dfp3[final_cols].sort_values(by='상품')                
                     
                                         
-                    dfp4 = dff.pivot_table(
+                    dfp4 = df.pivot_table(
                         index='상품', 
                         columns='완납여부', 
                         values='총분양금', 
@@ -1177,7 +1396,7 @@ elif menu == "분양":
                         st.write('동호기준')                
                         st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 세대(실), %)</div>', unsafe_allow_html=True)
                         styled_df = dfp3.style.apply(style_fill_col, axis=0)
-                        styled_df = styled_df.format({'완납(%)': '{:.0f}', '미납(%)': '{:.0f}'})
+                        styled_df = styled_df.format({'완납(%)': '{:.0f}%', '미납(%)': '{:.0f}%'})
                         st.dataframe(styled_df, use_container_width=True, hide_index=True)                    
                         #st.dataframe(dfp3, use_container_width=True, hide_index=True) #hide_index를 하면 인덱스 숨김                    
                     with c4:                        
@@ -1185,7 +1404,7 @@ elif menu == "분양":
                         st.markdown('<div style="text-align: right; font-size: 12px;">(단위 : 백만원, %)</div>', unsafe_allow_html=True)
                         styled_df = dfp4.style.apply(style_fill_col, axis=0)
                         styled_df = styled_df.format({'공급': '{:,.0f}', '완납': '{:,.0f}', '미납': '{:,.0f}',
-                                                      '완납(%)': '{:.0f}', '미납(%)': '{:.0f}',
+                                                      '완납(%)': '{:.0f}%', '미납(%)': '{:.0f}%',
                                                       })
                         st.dataframe(styled_df, use_container_width=True, hide_index=True)                    
                         #st.dataframe(dfp4.style.format(thousands=",", precision=0), use_container_width=True, hide_index=True)                        
@@ -1209,7 +1428,7 @@ elif menu == "분양":
                 if lawsuit > 0:
                     st.divider()
                     st.subheader('📊 소송현황')                                        
-                    dfp5 = dff.pivot_table(
+                    dfp5 = df.pivot_table(
                         index='상품',
                         columns='소송', 
                         values='동호수', 
@@ -1234,7 +1453,7 @@ elif menu == "분양":
                     dfp5['상품'] = pd.Categorical(dfp5['상품'], categories=custom_order, ordered=True)                    
                     dfp5 = dfp5.sort_values(by='상품')                   
                     
-                    dfp6 = dff.pivot_table(
+                    dfp6 = df.pivot_table(
                         index='상품', 
                         columns='소송', 
                         values='총분양금', 
@@ -1276,237 +1495,209 @@ elif menu == "분양":
                     
                     st.divider()
                     st.subheader('📊 전체현황')                                        
-                    dff_final = dff.groupby(['상품', '소송','완납여부', '계약여부2']).agg({
+                    dfg = df.groupby(['상품', '소송','완납여부', '계약여부2']).agg({
                         '동호수': 'count',
                         '총분양금': 'sum'
                         }).reset_index()
                     
-                    dff_final['총분양금'] = (dff_final['총분양금'] / 1_000_000).round(0) 
+                    dfg['총분양금'] = (dfg['총분양금'] / 1_000_000).round(0) 
                     # 해당 컬럼을 Categorical 타입으로 변환 (ordered=True가 핵심)
-                    dff_final['상품'] = pd.Categorical(dff_final['상품'], categories=custom_order, ordered=True)                    
+                    dfg['상품'] = pd.Categorical(dfg['상품'], categories=custom_order, ordered=True)                    
                     # '상품'은 오름차순(True), '완납여부'와 '소송'은 내림차순(False)
-                    dff_final = dff_final.sort_values(
+                    dfg = dfg.sort_values(
                         by=['상품', '완납여부', '소송'], 
                         ascending=[True, False, False])
-                    st.dataframe(dff_final.style.format(thousands=",", precision=0), use_container_width=True, hide_index=True)
+                    st.dataframe(dfg.style.format(thousands=",", precision=0), use_container_width=True, hide_index=True)
                     
                     
             else:
                 st.warning("조회된 결과가 없습니다.")            
 
 
-elif menu == '실적조회':
-    st.write("SAP실적조회")
-# =============================================================================
-#     url = "https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=391726001#gid=391726001"    
-#     data = conn.read(spreadsheet=url)      
-#     df_raw = pd.DataFrame(data)
-# =============================================================================
-    df_raw = alv_data()
+elif menu == "입주예정":
+    st.subheader('🏠 아파트 입주예정(부동산지인)')
+    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=1029648553#gid=1029648553"
+    rdf = gsconn.read(spreadsheet=url)        
+    num_col = ['세대수','기준년']
+    for col in num_col:
+        if col in rdf.columns:
+            rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+    #df = df[df['기준년'] > 2025]
+    rdf.loc[rdf['시도'] == '강원특별자치도', '시도'] = '강원도'        
+    dff = rdf[rdf['구분']=='아파트']    
+    #chart는 인덱스를 그대로 쓰고, px는 reset_index()를 해서 x값으로 쓴다.
+    dfp = dff.pivot_table(index='기준년', values='세대수', aggfunc='sum', fill_value=0).reset_index()    
+    fig1 = px.bar(dfp, x='기준년', y='세대수', 
+                  template="plotly_white",
+                  text='세대수') # 막대 위에 값 표시
+    # 4. 차트 디테일 설정 (막대 전용 설정)
+    fig1.update_traces(
+        texttemplate='%{text:,.0f}', 
+        textposition='outside',  # 막대 바깥쪽 상단에 수치 표시
+        marker_color='#1f77b4'   # 막대 색상 지정 (선택사항)
+    )    
+    fig1.update_layout(
+        xaxis=dict(tickmode='linear'), # 모든 년도가 나오도록 설정
+        yaxis=dict(
+            showgrid=True, 
+            gridcolor='LightGray',            
+            range=[0, dfp['세대수'].max() * 1.2], # 수치 라벨 공간 확보
+            dtick=100000,            
+            tickformat=',d'
+        ),
+        bargap=0.5 # 막대 사이의 간격 조절 (0.1 ~ 0.5 사이 추천)
+    )    
+    st.plotly_chart(fig1, use_container_width=True)
+    #st.line_chart(dfp)
+    #st.dataframe(dfp.style.format('{:,.0f}'), use_container_width=True)
     
-    # 숫자형 변환 (중요: 문자열로 섞여 있으면 연산 안됨)
-    df_raw['값'] = pd.to_numeric(df_raw['값'], errors='coerce').fillna(0)
+    col1, col2 = st.columns(2)
+    with col1: region = st.selectbox('시도 선택', sorted(rdf['시도'].unique()), index=1)       
+    with col2: dday = st.selectbox('기준월 선택', sorted(rdf[rdf['기준년']>2025]['기준월'].unique()))     
+    if st.button('조회'):
+        scol1, scol2, scol3 = st.columns([3.5,0.5,6])
+        cond = (rdf['기준월'] >= dday) & (rdf['시도']== region)
+        dff = rdf[cond]
+        dff = dff[['구분','단지명','소재지','세대수','기준월','기준년']]
+        with scol1:
+            st.write(f'{region} 연도별 입주예정')
+            dfp = dff.pivot_table(index='기준년', values='세대수', aggfunc='sum')
+            st.line_chart(dfp, height=500)            
+    
+        with scol3:                    
+            st.write(f'{region} 입주예정 자료')
+            st.dataframe(dff, use_container_width=True, hide_index=True, height=500)
 
-    col1, col2, col3 = st.columns([3,3,3])
-    #with col1: pj = st.text_input('사업명 입력')
-    with col1:
-        pj = st.selectbox('(본공사)사업명 선택', sorted(df_raw['프로젝트 내역'].unique()))
-        url_pair = 'https://docs.google.com/spreadsheets/d/1uoL2CDVEi_KPV74eT5VEOjVB7ucCrEYnl9TkNQvstsM/edit?gid=1549480112#gid=1549480112'
-        data1 = conn.read(spreadsheet=url_pair)      
-        df1 = pd.DataFrame(data1)
-        pj2 = next(iter(df1.loc[df1['pj'] == pj, 'pjo']), None)
-        
-    
-    with col2: dday = st.selectbox('기준월 선택', sorted(df_raw['기준월'].unique(), reverse=True))               
-    with col3:     
-        st.markdown('<p style="margin-bottom: 28px;"></p>', unsafe_allow_html=True)
-        sch_button = st.button('조회')
-        
-    if sch_button:
-        all_dfs = []
+
+elif menu == "인구":
+        st.subheader('🏠 주민등록인구')
+        url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=1726816395#gid=1726816395"    
+        rdf = gsconn.read(spreadsheet=url)
+        rdf = rdf.drop("행정기관코드", axis=1)
+        ncols = ['총인구수', '세대수', '남자 인구수', '여자 인구수']                    
+        for col in ncols:
+            if col in rdf.columns:
+                rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)            
+                # 비율 등이 아닌 일반 수치라면 정수(int)로 강제 변환
+                rdf[col] = rdf[col].astype(int)
+                
+        col1, col2 = st.columns(2)
         with col1:
-            st.write("본공사")
-            cond = (df_raw['기준월'] == dday)
-            if pj:
-                cond &= df_raw['프로젝트 내역'].str.contains(pj, na=False, case=False)        
-        
-            dff = df_raw[cond].copy()
-    
-            if dff.empty:
-                st.warning("조회된 데이터가 없습니다.")
-            else:
-                idx_cols = ['프로젝트', '프로젝트 내역', '기준월', '기간기준']
-                
-                # 1. 헬퍼 함수들
-                def get_series(df, category):
-                    return df[df['항목기준'] == category].groupby(idx_cols)['값'].sum()
-    
-                def create_row(series, name):
-                    # 연산 결과(Series)를 DataFrame으로 변환하고 컬럼명을 '값'으로 지정
-                    res = series.to_frame(name='값').reset_index()
-                    res['항목기준'] = name
-                    return res
-    
-                # 2. 항목별 Series 추출
-                s_sales = get_series(dff, '매출')
-                s_cost = get_series(dff, '매원')
-                s_sg_a = get_series(dff, '판관비')
-                s_oth_i = get_series(dff, '기타영업수익')
-                s_oth_e = get_series(dff, '기타영업비용')
-                s_int_i = get_series(dff, '이자수익')
-                s_int_e = get_series(dff, '이자비용')
-                s_fin = get_series(dff, '금융비')
-    
-                # 3. 산식 계산 (fill_value=0 필수)
-                gp_val = s_sales.sub(s_cost, fill_value=0) # 매출이익
-                op_val = gp_val.sub(s_sg_a, fill_value=0)  # 영업이익
-                ord_val = (op_val.add(s_oth_i, fill_value=0)
-                                 .sub(s_oth_e, fill_value=0)
-                                 .add(s_int_i, fill_value=0)
-                                 .sub(s_int_e, fill_value=0)
-                                 .sub(s_fin, fill_value=0)) # 경상이익
-                
-                cost_ratio_val = (s_cost.div(s_sales.replace(0, np.nan), fill_value=0).fillna(0) * 100)  
-                cost_ratio_df = create_row(cost_ratio_val, '원가율')
-                gp_df = create_row(gp_val, '매출이익')
-                op_df = create_row(op_val, '영업이익')
-                ord_df = create_row(ord_val, '경상이익')
-    
-                # 기존 dff와 계산된 지표들 병합                
-                dffc = pd.concat([dff, gp_df, op_df, ord_df, cost_ratio_df], ignore_index=True)    
-                # 6. 정렬 및 피벗
-                corder = ['매출', '토지비', '공사비', '경비', '공손충', '하자보수비', '매원','원가율', '매출이익',
-                          '판관비', '영업이익', '기타영업수익', '기타영업비용', '금융비', '이자수익', '이자비용', '경상이익']                
-                dffc['항목기준'] = pd.Categorical(dffc['항목기준'], categories=corder, ordered=True)
-                
-                # 기간기준 정렬 순서 정의
-                period_order = ['당월', '금년', '누계']                
-                # 기간기준 컬럼을 카테고리형으로 변환 (순서 고정)
-                dffc['기간기준'] = pd.Categorical(dffc['기간기준'], categories=period_order, ordered=True)                
-                               
-                
-                dffc_main = dffc.copy() # 본공사 결과 저장
-                all_dfs.append(dffc_main)
-                
-                # 피벗 테이블 생성 (이제 행과 열 모두 지정한 순서대로 정렬됩니다)                
-                dffp_main = dffc_main.pivot_table(index=['프로젝트', '항목기준'], columns='기간기준', values='값', aggfunc='sum')
-                styled_main = dffp_main.style.apply(style_fill_row, axis=1).format("{:,.0f}")
-                st.dataframe(styled_main, use_container_width=True, height=630)
-                             
-        with col2:
-            if pj2:
-                st.write("옵션공사")
-                cond = (df_raw['기준월'] == dday)            
-                cond &= df_raw['프로젝트 내역'].str.contains(pj2, na=False, case=False)        
-        
-                dff = df_raw[cond].copy()
-    
-                if dff.empty:
-                    st.warning("조회된 데이터가 없습니다.")
-                else:
-                    idx_cols = ['프로젝트', '프로젝트 내역', '기준월', '기간기준']
-                    
-                    # 1. 헬퍼 함수들
-                    def get_series(df, category):
-                        return df[df['항목기준'] == category].groupby(idx_cols)['값'].sum()
-        
-                    def create_row(series, name):
-                        # 연산 결과(Series)를 DataFrame으로 변환하고 컬럼명을 '값'으로 지정
-                        res = series.to_frame(name='값').reset_index()
-                        res['항목기준'] = name
-                        return res
-        
-                    # 2. 항목별 Series 추출
-                    s_sales = get_series(dff, '매출')
-                    s_cost = get_series(dff, '매원')
-                    s_sg_a = get_series(dff, '판관비')
-                    s_oth_i = get_series(dff, '기타영업수익')
-                    s_oth_e = get_series(dff, '기타영업비용')
-                    s_int_i = get_series(dff, '이자수익')
-                    s_int_e = get_series(dff, '이자비용')
-                    s_fin = get_series(dff, '금융비')
-        
-                    # 3. 산식 계산 (fill_value=0 필수)
-                    gp_val = s_sales.sub(s_cost, fill_value=0) # 매출이익
-                    op_val = gp_val.sub(s_sg_a, fill_value=0)  # 영업이익
-                    ord_val = (op_val.add(s_oth_i, fill_value=0)
-                                     .sub(s_oth_e, fill_value=0)
-                                     .add(s_int_i, fill_value=0)
-                                     .sub(s_int_e, fill_value=0)
-                                     .sub(s_fin, fill_value=0)) # 경상이익
-        
-                    # 4. 새로운 행 데이터 생성
-                    cost_ratio_val = (s_cost.div(s_sales.replace(0, np.nan), fill_value=0).fillna(0) * 100)  
-                    cost_ratio_df = create_row(cost_ratio_val, '원가율')
-                    gp_df = create_row(gp_val, '매출이익')
-                    op_df = create_row(op_val, '영업이익')
-                    ord_df = create_row(ord_val, '경상이익')
-        
-                    # 5. 기존 dff와 계산된 지표들 병합                    
-                    dffc = pd.concat([dff, gp_df, op_df, ord_df, cost_ratio_df], ignore_index=True)
-        
-                    # 6. 정렬 및 피벗
-                    corder = ['매출', '토지비', '공사비', '경비', '공손충', '하자보수비', '매원', '원가율','매출이익',
-                              '판관비', '영업이익', '기타영업수익', '기타영업비용', '금융비', '이자수익', '이자비용', '경상이익']                    
-                    dffc['항목기준'] = pd.Categorical(dffc['항목기준'], categories=corder, ordered=True)
-                    
-                    # 1. 기간기준 정렬 순서 정의
-                    period_order = ['당월', '금년', '누계']                    
-                    # 2. 기간기준 컬럼을 카테고리형으로 변환 (순서 고정)
-                    dffc['기간기준'] = pd.Categorical(dffc['기간기준'], categories=period_order, ordered=True)
-                                        
-                    
-                    dffc_opt = dffc.copy() # 옵션공사 결과 저장
-                    all_dfs.append(dffc_opt)
-                    
-                    # 옵션공사 테이블 출력 (기존 코드 유지)
-                    dffp_opt = dffc_opt.pivot_table(index=['프로젝트', '항목기준'], columns='기간기준', values='값', aggfunc='sum')
-                    styled_opt = dffp_opt.style.apply(style_fill_row, axis=1).format("{:,.0f}")
-                    st.dataframe(styled_opt, use_container_width=True, height=630)
-                    
-# =============================================================================
-#                     # 4. 피벗 테이블 생성 (이제 행과 열 모두 지정한 순서대로 정렬됩니다)
-#                     dffp = dffc.pivot_table(index=['프로젝트', '항목기준'], columns='기간기준', values='값', aggfunc='sum')                    
-#                     # .format("{:,.0f}")을 함께 써주면 천 단위 콤마와 배경색을 동시에 적용할 수 있습니다.
-#                     styled_dffp = dffp.style.apply(style_fill_row, axis=1).format("{:,.0f}")                
-#                     # 3. Streamlit에 출력
-#                     st.dataframe(styled_dffp, use_container_width=True, height=600)
-# =============================================================================
+            st.write('개략조회')
+            region = st.text_input('지역입력')
+            dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True))
             
-        with col3:
-            if pj2:
-                st.write("본공사+옵션공사 합계")                
-                # 1. 모든 데이터를 하나로 합침
-                total_df = pd.concat(all_dfs, ignore_index=True)                
-                # 2. '프로젝트'명을 '합계'로 통일 (피벗 시 행을 하나로 합치기 위함)
-                total_df['프로젝트'] = '합계'
+        with col2:
+            
+            dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True))               
+        if st.button('조회'):
+            cond = (rdf['행정기관'].str.contains(region)) & (rdf['기준월'] == dday)
+            dff = rdf[cond]
+            format_dict = {}
+            for col in dff.columns:
+                if dff[col].dtype == 'int64':
+                    format_dict[col] = '{:,.0f}'  # 정수는 천단위 콤마만
+                elif dff[col].dtype == 'float64':
+                    format_dict[col] = '{:,.1f}'  # 실수는 천단위 콤마 + 소수점 1자리
+            
+            st.dataframe(dff.style.format(format_dict), use_container_width=True, hide_index=True, height=500)
+        
+        
+elif menu == "미분양":
+    st.subheader('🏠 전국 미분양 추이')
+    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=667956721#gid=667956721"    
+    data = gsconn.read(spreadsheet=url)
+    data = data.drop(["항목","단위"], axis=1)
+    
+    data_sido = data[data['시군구']=='계']    
+    # axis=0은 세로 방향(컬럼별) 합계를 의미합니다.
+    monthly_total = data_sido.drop(columns=['구분','시군구']).sum(axis=0)
+    # 결과 확인을 위해 데이터프레임으로 변환
+    df_total = monthly_total.reset_index()
+    df_total.columns = ['월', '합계']    
+    # 차트를 위해 '월'을 인덱스로 설정
+    chart_data = df_total.set_index('월')
+    # 선 차트로 표현할 경우
+    st.line_chart(chart_data)    
+    st.divider()       
+    
+    st.subheader('🏠 시군구별 미분양')
+    col1, col2 = st.columns(2)
+    #with col1: region = st.selectbox('시도 선택', sorted(data['구분'].unique()), index=1)       
+    with col1: region = st.selectbox('시도 선택', ['전체'] + sorted(data['구분'].unique()))
+    with col2: dday = st.selectbox('기준월 선택', sorted(data.columns[3:], reverse=True))           
+    if st.button('조회'):
+        scol1, scol2 = st.columns(2)
+        with scol1:
+            row_cond = (data['시군구'] == '계')
+            sel_cols = ['구분', dday]            
+            dff = data.loc[row_cond, sel_cols].copy()            
+            if not dff.empty:
+                st.write(f"📊시도별 미분양 현황 [{dday} 기준]")                        
+                # '구분' 컬럼을 인덱스로 설정해야 막대 아래에 이름이 나옵니다.
+                chart_data = dff.set_index('구분')                                
+                st.bar_chart(chart_data, height=500)                                
+                # st.dataframe(dff, use_container_width=True, hide_index=True)
+            else:
+                st.warning("차트를 표시할 데이터가 없습니다.")    
                 
-                # 3. 정렬 순서 재지정 (concat 후 카테고리 속성이 풀릴 수 있으므로 다시 설정)
-                total_df['항목기준'] = pd.Categorical(total_df['항목기준'], categories=corder, ordered=True)
-                total_df['기간기준'] = pd.Categorical(total_df['기간기준'], categories=period_order, ordered=True)              
-                                
-                # 4. 피벗 테이블 생성
-                dffp_total = total_df.pivot_table(index=['프로젝트', '항목기준'], columns='기간기준', values='값', aggfunc='sum')                
-                
-                try:
-                    # 피벗 테이블에서 매출과 매원 행 추출 (인덱스 구조에 주의)
-                    # dffp_total.loc[('합계', '항목명')] 형태로 접근
-                    total_sales = dffp_total.loc[('합계', '매출')]
-                    total_cost = dffp_total.loc[('합계', '매원')]            
-                    # 총 매원 / 총 매출 (매출이 0인 경우 대비)
-                    total_ratio = (total_cost / total_sales.replace(0, np.nan)).fillna(0) * 100                    
-                    # 피벗 테이블의 '원가율' 행 업데이트
-                    dffp_total.loc[('합계', '원가율'), :] = total_ratio
-                except KeyError:
-                    # 데이터에 매출이나 매원이 없는 경우 대비
-                    pass
-                
-                # 5. 스타일 적용 및 출력
-                styled_total = dffp_total.style.apply(style_fill_row, axis=1).format("{:,.0f}")
-                st.dataframe(styled_total, use_container_width=True, height=630)        
+        with scol2:
+            # 1. 행 조건 설정 (구분에 region이 포함된 행)            
+            sel_cols = ['구분','시군구', dday] # 보여주고 싶은 컬럼 리스트
+            if region == '전체':
+                dff = data.loc[:, sel_cols]                     
+            else:
+                row_cond = data['구분'].str.contains(region, na=False)    
+                dff = data.loc[row_cond, sel_cols]                     
+            # 2. 행 조건 필터링 + dday 열(컬럼) 선택
+            # 필수로 보여야 할 정보(예: '구분')와 선택한 'dday' 열만 추출
+            
+            
+            if not dff.empty:
+                st.write(f"📊 {region} 지역 미분양 현황 [{dday}기준]")                                
+                dff[dday] = pd.to_numeric(dff[dday], errors='coerce').fillna(0)                        
+                dff = dff.sort_values(by=dday, ascending=False)                
+                # [핵심] subset을 사용하여 dday 컬럼에만 포맷 적용
+                styled_dff = dff.style.format("{:,.0f}", subset=[dday])                
+                st.dataframe(styled_dff, use_container_width=True, hide_index=True, height=500)
+            else:
+                st.warning("조회된 결과가 없습니다.")
 
 
+elif menu == "소송":
+    st.subheader('📊 소송현황 조회')
+    url = "https://docs.google.com/spreadsheets/d/1diNe5cD5pFtz9ca7c4z5leUsbUTPgAPMM7fFmjFOczQ/edit?gid=1053819147#gid=1053819147"
+    rdf = gsconn.read(spreadsheet=url)
+# =============================================================================
+#     ncols = ['약정','기표','상환','잔액']  #숫자칼럼 명시
+#     for col in ncols:
+#         if col in rdf.columns:
+#             rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
+# =============================================================================
+    
+    col1, col2 = st.columns(2)
+    pj_list = rdf['사업명'].drop_duplicates().tolist()        
+    with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)                
+        
+    if st.button('조회'):        
+        if pj:
+            cond = (rdf['사업명'].str.contains(pj, na=False, case=False)) & (rdf['판결여부'])
+            dff = rdf[cond].copy()
+            if not dff.empty:
+                dfp = dff.pivot_table(index=['판결여부','소송규모','사건명','접수일','원고','기일차수','최종일자'], values='원고수', aggfunc='sum').reset_index()
+                dfp = dfp.sort_values(['소송규모','접수일'], ascending=[False, True]) 
+# =============================================================================
+#                 ncols = dff.select_dtypes(include=['number']).columns
+#                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
+# =============================================================================
+                st.dataframe(dfp, use_container_width=True, hide_index=True)
+                st.metric(label="소송건수", value=f"{len(dfp)}건")
                 
+                
+        else:
+            st.warning("조회된 결과가 없습니다.")            
+
+
 elif menu == "실거래조회":        
     if "result_df" not in st.session_state:
         st.session_state.result_df = None  # 또는 pd.DataFrame()
@@ -1629,156 +1820,6 @@ elif menu == "실거래조회":
         else:
             st.warning("조회된 데이터가 없습니다. 기준월을 과거 날짜로 변경해 보세요.")
 
-
-elif menu == "입주예정":
-    st.subheader('🏠 아파트 입주예정(부동산지인)')
-    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=1029648553#gid=1029648553"
-    ddf = conn.read(spreadsheet=url)        
-    num_col = ['세대수','기준년']
-    for col in num_col:
-        if col in ddf.columns:
-            ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
-    #df = df[df['기준년'] > 2025]
-    ddf.loc[ddf['시도'] == '강원특별자치도', '시도'] = '강원도'        
-    dff = ddf[ddf['구분']=='아파트']    
-    #chart는 인덱스를 그대로 쓰고, px는 reset_index()를 해서 x값으로 쓴다.
-    dfp = dff.pivot_table(index='기준년', values='세대수', aggfunc='sum', fill_value=0).reset_index()    
-    fig1 = px.bar(dfp, x='기준년', y='세대수', 
-                  template="plotly_white",
-                  text='세대수') # 막대 위에 값 표시
-    # 4. 차트 디테일 설정 (막대 전용 설정)
-    fig1.update_traces(
-        texttemplate='%{text:,.0f}', 
-        textposition='outside',  # 막대 바깥쪽 상단에 수치 표시
-        marker_color='#1f77b4'   # 막대 색상 지정 (선택사항)
-    )    
-    fig1.update_layout(
-        xaxis=dict(tickmode='linear'), # 모든 년도가 나오도록 설정
-        yaxis=dict(
-            showgrid=True, 
-            gridcolor='LightGray',            
-            range=[0, dfp['세대수'].max() * 1.2], # 수치 라벨 공간 확보
-            dtick=100000,            
-            tickformat=',d'
-        ),
-        bargap=0.5 # 막대 사이의 간격 조절 (0.1 ~ 0.5 사이 추천)
-    )    
-    st.plotly_chart(fig1, use_container_width=True)
-    #st.line_chart(dfp)
-    #st.dataframe(dfp.style.format('{:,.0f}'), use_container_width=True)
-    
-    col1, col2 = st.columns(2)
-    with col1: region = st.selectbox('시도 선택', sorted(ddf['시도'].unique()), index=1)       
-    with col2: dday = st.selectbox('기준월 선택', sorted(ddf[ddf['기준년']>2025]['기준월'].unique()))     
-    if st.button('조회'):
-        scol1, scol2, scol3 = st.columns([3.5,0.5,6])
-        cond = (ddf['기준월'] >= dday) & (ddf['시도']== region)
-        dff = ddf[cond]
-        dff = dff[['구분','단지명','소재지','세대수','기준월','기준년']]
-        with scol1:
-            st.write(f'{region} 연도별 입주예정')
-            dfp = dff.pivot_table(index='기준년', values='세대수', aggfunc='sum')
-            st.line_chart(dfp, height=500)            
-    
-        with scol3:                    
-            st.write(f'{region} 입주예정 자료')
-            st.dataframe(dff, use_container_width=True, hide_index=True, height=500)
-
-
-elif menu == "인구":
-        st.subheader('🏠 주민등록인구')
-        url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=1726816395#gid=1726816395"    
-        ddf = conn.read(spreadsheet=url)
-        ddf = ddf.drop("행정기관코드", axis=1)
-        ncols = ['총인구수', '세대수', '남자 인구수', '여자 인구수']                    
-        for col in ncols:
-            if col in ddf.columns:
-                ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)            
-                # 비율 등이 아닌 일반 수치라면 정수(int)로 강제 변환
-                ddf[col] = ddf[col].astype(int)
-                
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write('개략조회')
-            region = st.text_input('지역입력')
-            dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))
-            
-        with col2:
-            
-            dday = st.selectbox('기준월 선택', sorted(ddf['기준월'].unique(), reverse=True))               
-        if st.button('조회'):
-            cond = (ddf['행정기관'].str.contains(region)) & (ddf['기준월'] == dday)
-            dff = ddf[cond]
-            format_dict = {}
-            for col in dff.columns:
-                if dff[col].dtype == 'int64':
-                    format_dict[col] = '{:,.0f}'  # 정수는 천단위 콤마만
-                elif dff[col].dtype == 'float64':
-                    format_dict[col] = '{:,.1f}'  # 실수는 천단위 콤마 + 소수점 1자리
-            
-            st.dataframe(dff.style.format(format_dict), use_container_width=True, hide_index=True, height=500)
-        
-        
-elif menu == "미분양":
-    st.subheader('🏠 전국 미분양 추이')
-    url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=667956721#gid=667956721"    
-    data = conn.read(spreadsheet=url)
-    data = data.drop(["항목","단위"], axis=1)
-    
-    data_sido = data[data['시군구']=='계']    
-    # axis=0은 세로 방향(컬럼별) 합계를 의미합니다.
-    monthly_total = data_sido.drop(columns=['구분','시군구']).sum(axis=0)
-    # 결과 확인을 위해 데이터프레임으로 변환
-    df_total = monthly_total.reset_index()
-    df_total.columns = ['월', '합계']    
-    # 차트를 위해 '월'을 인덱스로 설정
-    chart_data = df_total.set_index('월')
-    # 선 차트로 표현할 경우
-    st.line_chart(chart_data)    
-    st.divider()       
-    
-    st.subheader('🏠 시군구별 미분양')
-    col1, col2 = st.columns(2)
-    #with col1: region = st.selectbox('시도 선택', sorted(data['구분'].unique()), index=1)       
-    with col1: region = st.selectbox('시도 선택', ['전체'] + sorted(data['구분'].unique()))
-    with col2: dday = st.selectbox('기준월 선택', sorted(data.columns[3:], reverse=True))           
-    if st.button('조회'):
-        scol1, scol2 = st.columns(2)
-        with scol1:
-            row_cond = (data['시군구'] == '계')
-            sel_cols = ['구분', dday]            
-            dff = data.loc[row_cond, sel_cols].copy()            
-            if not dff.empty:
-                st.write(f"📊시도별 미분양 현황 [{dday} 기준]")                        
-                # '구분' 컬럼을 인덱스로 설정해야 막대 아래에 이름이 나옵니다.
-                chart_data = dff.set_index('구분')                                
-                st.bar_chart(chart_data, height=500)                                
-                # st.dataframe(dff, use_container_width=True, hide_index=True)
-            else:
-                st.warning("차트를 표시할 데이터가 없습니다.")    
-                
-        with scol2:
-            # 1. 행 조건 설정 (구분에 region이 포함된 행)            
-            sel_cols = ['구분','시군구', dday] # 보여주고 싶은 컬럼 리스트
-            if region == '전체':
-                dff = data.loc[:, sel_cols]                     
-            else:
-                row_cond = data['구분'].str.contains(region, na=False)    
-                dff = data.loc[row_cond, sel_cols]                     
-            # 2. 행 조건 필터링 + dday 열(컬럼) 선택
-            # 필수로 보여야 할 정보(예: '구분')와 선택한 'dday' 열만 추출
-            
-            
-            if not dff.empty:
-                st.write(f"📊 {region} 지역 미분양 현황 [{dday}기준]")                                
-                dff[dday] = pd.to_numeric(dff[dday], errors='coerce').fillna(0)                        
-                dff = dff.sort_values(by=dday, ascending=False)                
-                # [핵심] subset을 사용하여 dday 컬럼에만 포맷 적용
-                styled_dff = dff.style.format("{:,.0f}", subset=[dday])                
-                st.dataframe(styled_dff, use_container_width=True, hide_index=True, height=500)
-            else:
-                st.warning("조회된 결과가 없습니다.")
-
         
 elif menu == "청약홈조회":
     st.subheader('🏠 청약홈 APT 분양 정보 조회')            
@@ -1832,42 +1873,11 @@ elif menu == "청약홈조회":
                     st.error("상세 정보를 찾을 수 없습니다.")
 
 
-elif menu == "소송":
-    st.subheader('📊 소송현황 조회')
-    url = "https://docs.google.com/spreadsheets/d/1diNe5cD5pFtz9ca7c4z5leUsbUTPgAPMM7fFmjFOczQ/edit?gid=1053819147#gid=1053819147"
-    ddf = conn.read(spreadsheet=url)
-# =============================================================================
-#     ncols = ['약정','기표','상환','잔액']  #숫자칼럼 명시
-#     for col in ncols:
-#         if col in ddf.columns:
-#             ddf[col] = pd.to_numeric(ddf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)    
-# =============================================================================
-    
-    col1, col2 = st.columns(2)
-    pj_list = ddf['사업명'].drop_duplicates().tolist()        
-    with col1: pj = st.selectbox('조회할 사업명을 선택하세요', pj_list)                
-        
-    if st.button('조회'):        
-        if pj:
-            cond = (ddf['사업명'].str.contains(pj, na=False, case=False)) & (ddf['판결여부'])
-            dff = ddf[cond].copy()
-            if not dff.empty:
-                dfp = dff.pivot_table(index=['판결여부','소송규모','사건명','접수일','원고','기일차수','최종일자'], values='원고수', aggfunc='sum').reset_index()
-                dfp = dfp.sort_values(['소송규모','접수일'], ascending=[False, True]) 
-# =============================================================================
-#                 ncols = dff.select_dtypes(include=['number']).columns
-#                 config = {col: st.column_config.NumberColumn(format="%d") for col in ncols}
-# =============================================================================
-                st.dataframe(dfp, use_container_width=True, hide_index=True)
-                st.metric(label="소송건수", value=f"{len(dfp)}건")
-                
-                
-        else:
-            st.warning("조회된 결과가 없습니다.")            
                 
 
 # --- 하단 안내 ---
 if menu == "옵션선택":
     st.info("왼쪽 사이드바에서 메뉴를 선택해 주세요.")
+
 
 
