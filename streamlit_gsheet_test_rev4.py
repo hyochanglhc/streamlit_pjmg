@@ -1573,7 +1573,7 @@ elif menu == "인구":
         st.subheader('🏠 주민등록인구')
         url = "https://docs.google.com/spreadsheets/d/1j4lp5-8MJWr0ZgFevDs3Bv3O_rv9dJvQQUt7ew6Yt3A/edit?gid=1726816395#gid=1726816395"    
         rdf = gsconn.read(spreadsheet=url)
-        rdf = rdf.drop("행정기관코드", axis=1)
+        rdf = rdf.drop(rdf.columns[0], axis=1) #행정기관코드 삭제
         ncols = ['총인구수', '세대수', '남자 인구수', '여자 인구수']                    
         for col in ncols:
             if col in rdf.columns:
