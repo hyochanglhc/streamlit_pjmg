@@ -1579,14 +1579,10 @@ elif menu == "인구":
             if col in rdf.columns:
                 rdf[col] = pd.to_numeric(rdf[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)            
                 # 비율 등이 아닌 일반 수치라면 정수(int)로 강제 변환
-                rdf[col] = rdf[col].astype(int)
+                rdf[col] = rdf[col].astype(int)                
                 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write('개략조회')
-            region = st.text_input('지역입력')
-            dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True), key='select_1')
-            
+        region = st.text_input('지역입력')
+        dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True), key='select_1')            
         
         if st.button('조회'):
             cond = (rdf['행정기관'].str.contains(region)) & (rdf['기준월'] == dday)
