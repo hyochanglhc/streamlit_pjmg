@@ -1587,9 +1587,7 @@ elif menu == "인구":
             region = st.text_input('지역입력')
             dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True), key='select_1')
             
-        with col2:
-            
-            dday = st.selectbox('기준월 선택', sorted(rdf['기준월'].unique(), reverse=True), key='select_2')               
+        
         if st.button('조회'):
             cond = (rdf['행정기관'].str.contains(region)) & (rdf['기준월'] == dday)
             dff = rdf[cond]
