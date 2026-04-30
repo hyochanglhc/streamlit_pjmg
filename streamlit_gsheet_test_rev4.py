@@ -412,7 +412,7 @@ with st.sidebar:
 #                     st.session_state.update({"logged_in": False, "result_df": None, "user_id": None})
 #                     st.rerun()
 # =============================================================================
-        items = ["옵션선택","사업개요","실적조회","분양","동호약정납부","PF현황","중도금대출","자금수지","채권","소송","PJ도급","pjcode","실거래조회", "입주예정","인구","미분양",] #청약홈조회
+        items = ["옵션선택","사업개요","실적조회","분양","동호약정납부","PF현황","중도금대출","자금수지","채권","소송","PJ도급","pjcode","실거래조회", "입주예정","인구","미분양","청약홈조회"] #청약홈조회
         menu = option_menu("Manage", items,
                        #icons=["dash","info-circle", "bank", "bank", "bank", "bank","bank","house","house","house","house"],
                        icons=["dash"] + ["info-circle"]*len(items),
