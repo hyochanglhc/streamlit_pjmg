@@ -1628,6 +1628,7 @@ elif menu == "미분양":
             dff = data.loc[row_cond, sel_cols].copy()            
             if not dff.empty:
                 st.write(f"📊시도별 미분양 현황 [{dday} 기준]")                        
+                dff[dday] = pd.to_numeric(dff[dday].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                 # '구분' 컬럼을 인덱스로 설정해야 막대 아래에 이름이 나옵니다.
                 chart_data = dff.set_index('구분')                                
                 st.bar_chart(chart_data, height=500)                                
