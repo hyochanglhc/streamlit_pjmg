@@ -1649,11 +1649,17 @@ elif menu == "미분양":
             
             
             if not dff.empty:
-                st.write(f"📊 {region} 지역 미분양 현황 [{dday}기준]")                                
-                dff[dday] = pd.to_numeric(dff[dday], errors='coerce').fillna(0)                        
-                dff = dff.sort_values(by=dday, ascending=False)                
-                # [핵심] subset을 사용하여 dday 컬럼에만 포맷 적용
-                styled_dff = dff.style.format("{:,.0f}", subset=[dday])                
+                st.write(f"📊 {region} 지역 미분양 현황 [{dday}기준]")
+                
+                # 2. 데이터를 숫자로 강제 변환 (콤마 제거 및 에러 처리)
+                # 이 과정이 있어야 숫자 크기대로 정확히 정렬됩니다.
+                dff[dday] = pd.to_numeric(dff[dday].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                
+                # 3. 내림차순 정렬
+                dff = dff.sort_values(by=dday, ascending=False)
+                
+                # 4. 스타일 적용 및 출력
+                styled_dff = dff.style.format("{:,.0f}", subset=[dday])
                 st.dataframe(styled_dff, use_container_width=True, hide_index=True, height=500)
             else:
                 st.warning("조회된 결과가 없습니다.")
