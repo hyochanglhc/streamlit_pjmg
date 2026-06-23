@@ -1619,7 +1619,7 @@ elif menu == "미분양":
     col1, col2 = st.columns(2)
     #with col1: region = st.selectbox('시도 선택', sorted(data['구분'].unique()), index=1)       
     with col1: region = st.selectbox('시도 선택', ['전체'] + sorted(data['구분'].unique()))
-    with col2: dday = st.selectbox('기준월 선택', sorted(data.columns[3:], reverse=True))           
+    with col2: dday = st.selectbox('기준월 선택', sorted(data.columns[4:], reverse=True))           
     if st.button('조회'):
         scol1, scol2 = st.columns(2)
         with scol1:
